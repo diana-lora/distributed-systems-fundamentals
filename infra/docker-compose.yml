@@ -1,0 +1,158 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: outbox-postgres
+    environment:
+      POSTGRES_DB: outbox_db
+      POSTGRES_USER: outbox_user
+      POSTGRES_PASSWORD: outbox_password
+    ports:
+      - "5432:5432"
+    # Enable logical replication for Debezium CDC
+    command: [ "postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=4", "-c", "max_wal_senders=4" ]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U outbox_user -d outbox_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 15s # Gives the DB 15 seconds to boot before counting failures
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: outbox-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REREPLICATION_FACTOR: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+    healthcheck:
+      test: [ "CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 || exit 1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 20s # Gives Kafka 20 seconds to boot up safely
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: outbox-kafka-ui
+    ports:
+      - "8082:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      # Define the Kafka cluster configuration for the UI
+      DYNAMIC_CONFIG_ENABLED: 'true'
+      KAFKA_CLUSTERS_0_NAME: local-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: outbox-spring-app
+    ports:
+      - "8080:8080"
+    # Ensure application waits until both DB and Message Broker are fully healthy
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/outbox_db
+      SPRING_DATASOURCE_USERNAME: outbox_user
+      SPRING_DATASOURCE_PASSWORD: outbox_password
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_FLYWAY_ENABLED: "true"
+
+  debezium:
+    build:
+      context: ./Debezium
+      dockerfile: Dockerfile
+    container_name: outbox-debezium
+    ports:
+      - "8083:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+          condition: service_healthy
+#      app:
+#        condition: service_started
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: my_connect_configs
+      OFFSET_STORAGE_TOPIC: my_connect_offsets
+      STATUS_STORAGE_TOPIC: my_connect_statuses
+      CONFIG_PROVIDER_CLASS: ""
+
+  connector-init:
+    image: curlimages/curl:latest
+    volumes:
+      - ./infra/debezium-outbox-connector.json:/tmp/config.json
+    depends_on:
+      debezium:
+        condition: service_started
+    command: |
+      sh -c "
+        echo 'Waiting for Kafka Connect to start up...'
+        while ! curl -s http://debezium:8083/connectors/; do
+          sleep 3
+        done
+      
+        echo 'Registering or updating Debezium connector via PUT...'
+        # 🌟 FIX: Point exactly to the absolute volume path inside the container [source]
+        curl -s -X PUT -H 'Content-Type: application/json' -d @/tmp/config.json http://debezium:8083/connectors/postgres-outbox-connector/config
+      
+        echo 'Validating task runtime health status...'
+        AVAILABLE=false
+      
+        for i in 1 2 3 4 5 6 7 8 9 10; do
+          # 🌟 FIX: Changed from \$STATUS to $$STATUS so Docker Compose ignores it [source]
+          STATUS=\$(curl -s http://debezium:8083/connectors/postgres-outbox-connector/status)
+          echo 'Current state:' \$$STATUS
+      
+          if echo \"\$$STATUS\" | grep -q 'FAILED'; then
+            echo 'CRITICAL: Debezium connector task initialization failed!'
+            exit 1
+          fi
+      
+          if echo \"\$$STATUS\" | grep -q 'RUNNING'; then
+            if echo \"\$$STATUS\" | grep -q '\"tasks\":\\[\\]'; then
+              echo 'Waiting for tasks array list allocation...'
+            else
+              echo 'SUCCESS: Debezium outbox pipeline is active and RUNNING!'
+              AVAILABLE=true
+              break
+            fi
+          fi
+      
+          sleep 3
+        done
+
+        if [ \"\$$AVAILABLE\" = 'false' ]; then
+          echo 'TIMEOUT: Connector registered but tasks are taking too long to start.'
+          exit 1
+        fi
+      "
+volumes:
+  pgdata:
