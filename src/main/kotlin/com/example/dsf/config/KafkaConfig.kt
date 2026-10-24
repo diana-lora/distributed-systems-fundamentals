@@ -3,14 +3,15 @@ package com.example.dsf.config
 import com.example.dsf.commons.OrderCreatedEvent
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.kotlinModule
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.AdminClientConfig
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.errors.TopicExistsException
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.kafka.common.serialization.StringSerializer
@@ -33,6 +34,9 @@ import org.springframework.kafka.listener.DefaultErrorHandler
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
 import org.springframework.kafka.support.serializer.JacksonJsonDeserializer
 import org.springframework.util.backoff.FixedBackOff
+import tools.jackson.databind.DeserializationFeature as KafkaDeserializationFeature
+import tools.jackson.databind.json.JsonMapper as KafkaJsonMapper
+import tools.jackson.module.kotlin.kotlinModule as kafkaKotlinModule
 
 @EnableKafka
 @Configuration
@@ -41,6 +45,8 @@ class KafkaConfig(
     private val bootstrapServers: String
 ) {
 
+    private val logger = KotlinLogging.logger {}
+
     @Bean
     @Primary
     fun customObjectMapper(): ObjectMapper {
@@ -48,6 +54,14 @@ class KafkaConfig(
             registerModule(kotlinModule())
             configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
         }
+    }
+
+    @Bean
+    fun customKafkaJsonMapper(): KafkaJsonMapper {
+        return KafkaJsonMapper.builder()
+            .addModule(kafkaKotlinModule())
+            .disable(KafkaDeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            .build()
     }
 
     @Bean
@@ -88,14 +102,18 @@ class KafkaConfig(
     }
 
     @Bean
-    fun customConsumerFactory(): ConsumerFactory<String, OrderCreatedEvent> {
+    fun customConsumerFactory(kafkaJsonMapper: KafkaJsonMapper): ConsumerFactory<String, OrderCreatedEvent> {
         val configProps = mutableMapOf<String, Any>(
             ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG to bootstrapServers,
             ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java,
             ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to ErrorHandlingDeserializer::class.java
         )
 
-        val jacksonJsonDeserializer = JacksonJsonDeserializer(OrderCreatedEvent::class.java, false).apply {
+        val jacksonJsonDeserializer = JacksonJsonDeserializer(
+            OrderCreatedEvent::class.java,
+            kafkaJsonMapper,
+            false
+        ).apply {
             addTrustedPackages("com.example.dsf.commons")
         }
 
@@ -131,8 +149,12 @@ class KafkaConfig(
             val toCreate = topics.filter { !existing.contains(it.name()) }
 
             if (toCreate.isNotEmpty()) {
-                admin.createTopics(toCreate).all().get()
-                println("Kafka topics created successfully on startup.")
+                try {
+                    admin.createTopics(toCreate).all().get()
+                    logger.info { "Kafka topics created successfully on startup." }
+                } catch (e: java.util.concurrent.ExecutionException) {
+                    if (e.cause !is TopicExistsException) throw e
+                }
             }
         }
     }

@@ -5,4 +5,4 @@ import com.example.dsf.history.domain.OrderHistoryRepository
 import java.util.UUID
 import org.springframework.data.repository.CrudRepository
 
-interface SpringDataHistoryRepository: CrudRepository<OrderHistory, UUID>, OrderHistoryRepository
+interface PostgresOrderHistoryRepository: CrudRepository<OrderHistory, UUID>, OrderHistoryRepository

@@ -1,10 +1,11 @@
-package com.example.dsf.history
+package com.example.dsf.history.infra.kafka
 
 import com.example.dsf.config.KafkaConfig
-import com.example.dsf.history.infra.db.SpringDataHistoryRepository
+import com.example.dsf.history.infra.db.ClickhouseOrderHistoryRepository
 import com.example.dsf.order.application.CreateOrderService
 import com.example.dsf.order.application.commands.PlaceOrderCommand
 import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerConfig
@@ -14,6 +15,8 @@ import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.kafka.common.serialization.StringSerializer
 import org.assertj.core.api.Assertions.assertThat
+import org.awaitility.kotlin.await
+import org.awaitility.kotlin.untilAsserted
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -21,15 +24,21 @@ import org.springframework.boot.test.context.SpringBootTest
 import java.math.BigDecimal
 import java.time.Duration
 import java.util.UUID
+import org.springframework.test.context.TestPropertySource
+import com.example.dsf.support.IntegrationTestContainers
 
 @SpringBootTest
-class OrderEventConsumerIntegrationTest {
+@TestPropertySource(properties = [
+    "app.toggle.order-history-source=clickhouse",
+    "spring.kafka.consumer.group-id=order-history-clickhouse-it"
+])
+class ClickhouseOrderEventConsumerIT : IntegrationTestContainers() {
 
     @Value($$"${spring.kafka.bootstrap-servers}")
     private lateinit var bootstrapServers: String
 
     @Autowired
-    private lateinit var historyRepository: SpringDataHistoryRepository
+    private lateinit var historyRepository: ClickhouseOrderHistoryRepository
 
     @Autowired
     private lateinit var createOrderService: CreateOrderService
@@ -46,22 +55,14 @@ class OrderEventConsumerIntegrationTest {
             )
         )
 
-        var found = false
-        val deadline = System.currentTimeMillis() + 15000
-        while (System.currentTimeMillis() < deadline) {
+        await.atMost(Duration.ofSeconds(15)).pollInterval(Duration.ofMillis(250)).untilAsserted {
             val records = historyRepository.findAll().filter { it.orderId == order.id }
-            if (records.isNotEmpty()) {
-                val record = records.first()
-                assertThat(record.customerId).isEqualTo(customerId)
-                assertThat(record.totalAmount).isEqualByComparingTo(totalAmount)
-                assertThat(record.orderStatus).isEqualTo("CREATED")
-                found = true
-                break
-            }
-            Thread.sleep(250)
+            assertThat(records).isNotEmpty()
+            val record = records.first()
+            assertThat(record.customerId).isEqualTo(customerId)
+            assertThat(record.totalAmount).isEqualByComparingTo(totalAmount)
+            assertThat(record.orderStatus).isEqualTo("CREATED")
         }
-
-        assertThat(found).isTrue()
     }
 
     @Test
@@ -88,22 +89,14 @@ class OrderEventConsumerIntegrationTest {
         }
 
         // Wait and verify order history entry
-        var found = false
-        val deadline = System.currentTimeMillis() + 10000
-        while (System.currentTimeMillis() < deadline) {
+        await.atMost(Duration.ofSeconds(10)).pollInterval(Duration.ofMillis(200)).untilAsserted {
             val records = historyRepository.findAll().filter { it.orderId == orderId }
-            if (records.isNotEmpty()) {
-                val record = records.first()
-                assertThat(record.customerId).isEqualTo(customerId)
-                assertThat(record.totalAmount).isEqualByComparingTo("99.99")
-                assertThat(record.orderStatus).isEqualTo("CREATED")
-                found = true
-                break
-            }
-            Thread.sleep(200)
+            assertThat(records).isNotEmpty()
+            val record = records.first()
+            assertThat(record.customerId).isEqualTo(customerId)
+            assertThat(record.totalAmount).isEqualByComparingTo("99.99")
+            assertThat(record.orderStatus).isEqualTo("CREATED")
         }
-
-        assertThat(found).isTrue()
     }
 
     @Test
@@ -135,21 +128,12 @@ class OrderEventConsumerIntegrationTest {
                 producer.send(ProducerRecord(KafkaConfig.ORDER_EVENTS_TOPIC, testKey, poisonPayload)).get()
             }
 
-            var dltMessageReceived = false
-            val deadline = System.currentTimeMillis() + 15000
-            while (System.currentTimeMillis() < deadline) {
-                val records = dltConsumer.poll(Duration.ofMillis(500))
-                for (rec in records) {
-                    if (rec.key() == testKey) {
-                        assertThat(rec.value()).isEqualTo(poisonPayload)
-                        dltMessageReceived = true
-                        break
-                    }
-                }
-                if (dltMessageReceived) break
+            val received = mutableListOf<ConsumerRecord<String, ByteArray>>()
+            await.atMost(Duration.ofSeconds(15)).pollInSameThread().untilAsserted {
+                received += dltConsumer.poll(Duration.ofMillis(500)).filter { it.key() == testKey }
+                assertThat(received).isNotEmpty()
             }
-
-            assertThat(dltMessageReceived).isTrue()
+            assertThat(received.first().value()).isEqualTo(poisonPayload)
         }
     }
 }

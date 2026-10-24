@@ -29,7 +29,7 @@ CREATE TABLE order_history
     customer_id  VARCHAR(255)             NOT NULL,
     total_amount NUMERIC(12, 2)           NOT NULL,
     order_status VARCHAR(50)              NOT NULL,
-    action_type  VARCHAR(50)              NOT NULL,
+    version      BIGINT                   NOT NULL DEFAULT 0,
     processed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -78,6 +78,9 @@ The application stack is built entirely using containerized modern enterprise te
 * **`docker compose ps`**
   Displays the current operational state and port bindings of all containers to quickly verify which services are healthy or crashing.
 
+* **ClickHouse log warnings**
+  `Delay accounting is not enabled` and `Integrity check of the executable skipped` are harmless in the container: delay accounting depends on a kernel setting, and the official image may not include a reference checksum.
+
 * **`docker compose logs app -f`**
   Tails the live log stream of the Spring Boot application (change `app` to `debezium` or `kafka` to inspect other services) to capture startup exceptions or connection failures.
 

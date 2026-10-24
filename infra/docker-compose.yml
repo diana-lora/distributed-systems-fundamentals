@@ -21,6 +21,32 @@ services:
       retries: 5
       start_period: 15s # Gives the DB 15 seconds to boot before counting failures
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    container_name: clickhouse-server
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      - CLICKHOUSE_USER=ch_user
+      - CLICKHOUSE_PASSWORD=ch_password
+      - CLICKHOUSE_DB=orders_analytics
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+      - ./clickhouse/listen.xml:/etc/clickhouse-server/config.d/docker_related_config.xml:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8123/ping || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: always
+
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: outbox-kafka
@@ -108,7 +134,7 @@ services:
   connector-init:
     image: curlimages/curl:latest
     volumes:
-      - ./infra/debezium-outbox-connector.json:/tmp/config.json
+      - ./debezium-outbox-connector.json:/tmp/config.json
     depends_on:
       debezium:
         condition: service_started
@@ -120,14 +146,13 @@ services:
         done
       
         echo 'Registering or updating Debezium connector via PUT...'
-        # 🌟 FIX: Point exactly to the absolute volume path inside the container [source]
+        # Use the mounted connector configuration file.
         curl -s -X PUT -H 'Content-Type: application/json' -d @/tmp/config.json http://debezium:8083/connectors/postgres-outbox-connector/config
       
         echo 'Validating task runtime health status...'
         AVAILABLE=false
       
         for i in 1 2 3 4 5 6 7 8 9 10; do
-          # 🌟 FIX: Changed from \$STATUS to $$STATUS so Docker Compose ignores it [source]
           STATUS=\$(curl -s http://debezium:8083/connectors/postgres-outbox-connector/status)
           echo 'Current state:' \$$STATUS
       
@@ -156,3 +181,5 @@ services:
       "
 volumes:
   pgdata:
+  clickhouse_data:
+  clickhouse_logs:
