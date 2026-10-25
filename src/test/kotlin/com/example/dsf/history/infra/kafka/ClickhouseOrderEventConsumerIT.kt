@@ -4,6 +4,7 @@ import com.example.dsf.config.KafkaConfig
 import com.example.dsf.history.infra.db.ClickhouseOrderHistoryRepository
 import com.example.dsf.order.application.CreateOrderService
 import com.example.dsf.order.application.commands.PlaceOrderCommand
+import com.example.dsf.utils.ClickhouseOrderHistoryTestRepository
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.clients.consumer.KafkaConsumer
@@ -16,7 +17,6 @@ import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.kafka.common.serialization.StringSerializer
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.kotlin.await
-import org.awaitility.kotlin.untilAsserted
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
@@ -25,7 +25,7 @@ import java.math.BigDecimal
 import java.time.Duration
 import java.util.UUID
 import org.springframework.test.context.TestPropertySource
-import com.example.dsf.support.IntegrationTestContainers
+import com.example.dsf.utils.IntegrationTestContainers
 
 @SpringBootTest
 @TestPropertySource(properties = [
@@ -38,7 +38,7 @@ class ClickhouseOrderEventConsumerIT : IntegrationTestContainers() {
     private lateinit var bootstrapServers: String
 
     @Autowired
-    private lateinit var historyRepository: ClickhouseOrderHistoryRepository
+    private lateinit var historyRepository: ClickhouseOrderHistoryTestRepository
 
     @Autowired
     private lateinit var createOrderService: CreateOrderService

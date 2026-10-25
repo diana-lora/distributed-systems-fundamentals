@@ -2,6 +2,7 @@ package com.example.dsf.history.infra.db
 
 import com.example.dsf.history.domain.OrderHistory
 import com.example.dsf.history.domain.OrderHistoryRepository
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.sql.ResultSet
 import java.time.LocalDateTime
 import java.time.ZoneOffset
@@ -17,7 +18,7 @@ class ClickhouseOrderHistoryRepository(
     @Qualifier("clickhouseDataSource") private val datasource: DataSource
 ) : OrderHistoryRepository {
 
-    private val log = LoggerFactory.getLogger(ClickhouseOrderHistoryRepository::class.java)
+    protected val log = KotlinLogging.logger {}
 
     override fun save(history: OrderHistory): OrderHistory {
         val sql = """
@@ -36,11 +37,7 @@ class ClickhouseOrderHistoryRepository(
                 stmt.executeUpdate()
             }
         }
-        log.info(
-            "Successfully appended domain record to ClickHouse for Order ID: {} with version offset: {}",
-            history.orderId,
-            history.version
-        )
+        log.info { "Successfully appended domain record to ClickHouse for Order ID: ${history.orderId} with version offset: ${history.version}" }
         return history
     }
 
@@ -71,39 +68,11 @@ class ClickhouseOrderHistoryRepository(
                 }
             }
         }
-        log.info("Time travel execution completed for timestamp: {}. Found {} historical states.", targetTime, records.size)
+        log.info{ "Time travel execution completed for timestamp: $targetTime. Found ${records.size} historical states." }
         return records
     }
 
-    @TestOnly
-    fun findAll(): List<OrderHistory> {
-        val sql = """
-            SELECT 
-                order_id,
-                argMax(customer_id, version) AS latest_customer_id,
-                argMax(total_amount, version) AS latest_total_amount,
-                argMax(status, version) AS latest_status,
-                max(created_at) AS latest_created_at,
-                max(version) AS latest_version
-            FROM order_history 
-            GROUP BY order_id
-        """.trimIndent()
-        val records = mutableListOf<OrderHistory>()
-
-        datasource.connection.use { connection ->
-            connection.prepareStatement(sql).use { stmt ->
-                stmt.executeQuery().use { resultSet ->
-                    while (resultSet.next()) {
-                        records.add(resultSet.toOrderHistory())
-                    }
-                }
-            }
-        }
-        log.info("Successfully fetched {} consolidated records from ClickHouse using FINAL execution modifier", records.size)
-        return records
-    }
-
-    private fun ResultSet.toOrderHistory(): OrderHistory {
+    protected fun ResultSet.toOrderHistory(): OrderHistory {
         return OrderHistory(
             orderId = getObject("order_id", java.util.UUID::class.java),
             customerId = getString("latest_customer_id"),
