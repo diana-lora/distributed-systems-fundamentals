@@ -117,7 +117,9 @@ class PostgresOrderEventConsumerIT : IntegrationTestContainers() {
                 "orderId": "$orderId",
                 "customerId": "$customerId",
                 "totalAmount": "99.99",
-                "status": "CREATED"
+                "status": "CREATED",
+                "createdAt": "2026-01-15T10:00:00Z",
+                "updatedAt": "2026-01-15T10:00:00Z"
             }
             """.trimIndent()
 

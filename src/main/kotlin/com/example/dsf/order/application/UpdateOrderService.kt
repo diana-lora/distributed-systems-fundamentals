@@ -13,6 +13,7 @@ import com.example.dsf.order.domain.outbox.OutboxRepository
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
 
 @Service
 class UpdateOrderService(
@@ -36,6 +37,8 @@ class UpdateOrderService(
                 customerId = savedOrder.customerId,
                 totalAmount = savedOrder.totalAmount,
                 newStatus = savedOrder.status,
+                createdAt = savedOrder.createdAt,
+                updatedAt = Instant.now(),
             )
         val jsonPayload = objectMapper.writerFor(OrderEvent::class.java).writeValueAsString(updatedEvent)
 

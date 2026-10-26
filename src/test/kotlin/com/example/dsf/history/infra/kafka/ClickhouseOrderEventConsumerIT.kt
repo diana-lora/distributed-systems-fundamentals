@@ -28,6 +28,7 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.TestPropertySource
 import java.math.BigDecimal
 import java.time.Duration
+import java.time.Instant
 import java.util.UUID
 
 @SpringBootTest
@@ -79,6 +80,7 @@ class ClickhouseOrderEventConsumerIT : IntegrationTestContainers() {
         val totalAmount = BigDecimal("79.50")
         val order = createOrderService.execute(PlaceOrderCommand(customerId, totalAmount))
         var createdVersion = -1L
+        lateinit var createdAt: Instant
 
         await.atMost(Duration.ofSeconds(15)).pollInterval(Duration.ofMillis(250)).untilAsserted {
             val records = historyRepository.findAll().filter { it.orderId == order.id }
@@ -88,7 +90,11 @@ class ClickhouseOrderEventConsumerIT : IntegrationTestContainers() {
             assertThat(createdRecord.customerId).isEqualTo(customerId)
             assertThat(createdRecord.totalAmount).isEqualByComparingTo(totalAmount)
             createdVersion = createdRecord.version
+            createdAt = createdRecord.createdAt
         }
+
+        val timeBeforeUpdate = Instant.now()
+        Thread.sleep(10)
 
         updateOrderService.execute(
             UpdateOrderCommand(
@@ -106,7 +112,22 @@ class ClickhouseOrderEventConsumerIT : IntegrationTestContainers() {
             assertThat(record.version).isGreaterThan(createdVersion)
             assertThat(record.customerId).isEqualTo(customerId)
             assertThat(record.totalAmount).isEqualByComparingTo(totalAmount)
+            assertThat(record.createdAt).isEqualTo(createdAt)
+            assertThat(record.updatedAt).isAfter(timeBeforeUpdate)
         }
+
+        val snapshotBeforeUpdate = historyRepository.findBefore(timeBeforeUpdate).single { it.orderId == order.id }
+        assertThat(snapshotBeforeUpdate.orderStatus).isEqualTo(OrderStatus.CREATED)
+        assertThat(snapshotBeforeUpdate.version).isEqualTo(createdVersion)
+
+        val snapshotNow = historyRepository.findBefore(Instant.now()).single { it.orderId == order.id }
+        assertThat(snapshotNow.orderStatus).isEqualTo(OrderStatus.PROCESSING)
+        assertThat(snapshotNow.createdAt).isEqualTo(createdAt)
+
+        // Background merges must not remove earlier states, otherwise time travel loses them
+        historyRepository.optimizeFinal()
+        val snapshotAfterMerge = historyRepository.findBefore(timeBeforeUpdate).single { it.orderId == order.id }
+        assertThat(snapshotAfterMerge.orderStatus).isEqualTo(OrderStatus.CREATED)
     }
 
     @Test
@@ -120,7 +141,9 @@ class ClickhouseOrderEventConsumerIT : IntegrationTestContainers() {
                 "orderId": "$orderId",
                 "customerId": "$customerId",
                 "totalAmount": "99.99",
-                "status": "CREATED"
+                "status": "CREATED",
+                "createdAt": "2026-01-15T10:00:00Z",
+                "updatedAt": "2026-01-15T10:00:00Z"
             }
             """.trimIndent()
 

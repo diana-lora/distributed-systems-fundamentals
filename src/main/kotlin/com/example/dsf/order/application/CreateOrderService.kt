@@ -34,6 +34,8 @@ class CreateOrderService(
                 customerId = savedOrder.customerId,
                 totalAmount = savedOrder.totalAmount,
                 status = savedOrder.status,
+                createdAt = savedOrder.createdAt,
+                updatedAt = savedOrder.createdAt,
             )
         val jsonPayload = objectMapper.writerFor(OrderEvent::class.java).writeValueAsString(orderCreatedEvent)
 

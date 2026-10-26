@@ -28,6 +28,8 @@ class ProcessOrderHistoryService(
                 customerId = event.customerId,
                 totalAmount = event.totalAmount,
                 orderStatus = event.status,
+                createdAt = event.createdAt,
+                updatedAt = event.updatedAt,
                 version = version,
             )
 
@@ -45,6 +47,8 @@ class ProcessOrderHistoryService(
                 customerId = event.customerId,
                 totalAmount = event.totalAmount,
                 orderStatus = event.newStatus,
+                createdAt = event.createdAt,
+                updatedAt = event.updatedAt,
                 version = version,
             )
 

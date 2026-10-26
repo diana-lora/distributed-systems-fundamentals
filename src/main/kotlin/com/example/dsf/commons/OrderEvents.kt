@@ -5,6 +5,7 @@ import com.example.dsf.commons.OrderEventType.ORDER_STATUS_UPDATED
 import com.fasterxml.jackson.annotation.JsonSubTypes
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 import java.math.BigDecimal
+import java.time.Instant
 
 object OrderEventType {
     const val ORDER_CREATED = "ORDER_CREATED"
@@ -27,6 +28,8 @@ data class OrderCreatedEvent(
     val customerId: String,
     val totalAmount: BigDecimal,
     val status: OrderStatus,
+    val createdAt: Instant,
+    val updatedAt: Instant,
 ) : OrderEvent
 
 data class OrderStatusUpdatedEvent(
@@ -34,4 +37,6 @@ data class OrderStatusUpdatedEvent(
     val customerId: String,
     val totalAmount: BigDecimal,
     val newStatus: OrderStatus,
+    val createdAt: Instant,
+    val updatedAt: Instant,
 ) : OrderEvent

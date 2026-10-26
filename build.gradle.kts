@@ -33,12 +33,13 @@ dependencies {
     implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
 
-    implementation("com.clickhouse:clickhouse-jdbc:0.6.5")
+    implementation("com.clickhouse:clickhouse-jdbc:0.11.0")
     implementation("org.apache.httpcomponents.client5:httpclient5")
     implementation("org.flywaydb:flyway-database-clickhouse:10.11.0")
 
     implementation("org.springframework.kafka:spring-kafka")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
     implementation("tools.jackson.module:jackson-module-kotlin")
 
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")

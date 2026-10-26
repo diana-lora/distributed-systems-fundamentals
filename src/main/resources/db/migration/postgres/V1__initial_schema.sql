@@ -5,7 +5,8 @@ CREATE TABLE orders
     customer_id  VARCHAR(255)             NOT NULL,
     total_amount NUMERIC(12, 2)           NOT NULL,
     status       VARCHAR(50)              NOT NULL,
-    created_at   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    version      BIGINT                   NOT NULL DEFAULT 0
 );
 
 -- 2. Transactional Outbox Table
@@ -30,7 +31,8 @@ CREATE TABLE order_history
     total_amount NUMERIC(12, 2)           NOT NULL,
     order_status VARCHAR(50)              NOT NULL,
     version      BIGINT                   NOT NULL DEFAULT 0,
-    processed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at   TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at   TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
 CREATE INDEX idx_outbox_created_at ON outbox (created_at);

@@ -18,7 +18,8 @@ class ClickhouseOrderHistoryTestRepository(
                 argMax(customer_id, version) AS latest_customer_id,
                 argMax(total_amount, version) AS latest_total_amount,
                 argMax(status, version) AS latest_status,
-                max(created_at) AS latest_created_at,
+                any(created_at) AS latest_created_at,
+                max(updated_at) AS latest_updated_at,
                 max(version) AS latest_version
             FROM order_history 
             GROUP BY order_id
@@ -34,7 +35,14 @@ class ClickhouseOrderHistoryTestRepository(
                 }
             }
         }
-        log.info { "Successfully fetched ${records.size} consolidated records from ClickHouse using FINAL execution modifier" }
+        log.info { "Successfully fetched ${records.size} consolidated records from ClickHouse using argMax aggregation" }
         return records
+    }
+
+    /** Forces ClickHouse to merge all parts immediately, as a background merge would do eventually. */
+    fun optimizeFinal() {
+        datasource.connection.use { connection ->
+            connection.createStatement().use { stmt -> stmt.execute("OPTIMIZE TABLE order_history FINAL") }
+        }
     }
 }

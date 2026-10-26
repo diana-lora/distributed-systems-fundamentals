@@ -16,7 +16,8 @@ data class OrderHistory(
     val customerId: String,
     val totalAmount: BigDecimal,
     val orderStatus: OrderStatus,
-    val processedAt: Instant = Instant.now(),
+    val createdAt: Instant,
+    val updatedAt: Instant,
     val version: Long = 0L,
 ) : Persistable<UUID> {
     override fun getId(): UUID = id
