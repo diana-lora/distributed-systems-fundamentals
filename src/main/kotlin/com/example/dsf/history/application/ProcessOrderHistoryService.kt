@@ -5,11 +5,11 @@ import com.example.dsf.commons.OrderStatusUpdatedEvent
 import com.example.dsf.history.domain.OrderHistory
 import com.example.dsf.history.domain.OrderHistoryRepository
 import com.example.dsf.history.infra.db.ClickhouseOrderHistoryRepository
-import java.util.UUID
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.util.UUID
 
 @Service
 class ProcessOrderHistoryService(
@@ -18,27 +18,35 @@ class ProcessOrderHistoryService(
     @Value($$"${app.toggle.order-history-source}") private val orderHistorySource: String,
 ) {
     @Transactional
-    fun logOrderCreation(event: OrderCreatedEvent, version: Long) {
-        val history = OrderHistory(
-            orderId = UUID.fromString(event.orderId),
-            customerId = event.customerId,
-            totalAmount = event.totalAmount,
-            orderStatus = event.status,
-            version = version
-        )
+    fun logOrderCreation(
+        event: OrderCreatedEvent,
+        version: Long,
+    ) {
+        val history =
+            OrderHistory(
+                orderId = UUID.fromString(event.orderId),
+                customerId = event.customerId,
+                totalAmount = event.totalAmount,
+                orderStatus = event.status,
+                version = version,
+            )
 
         save(history)
     }
 
     @Transactional
-    fun logOrderStatusUpdate(event: OrderStatusUpdatedEvent, version: Long) {
-        val history = OrderHistory(
-            orderId = UUID.fromString(event.orderId),
-            customerId = event.customerId,
-            totalAmount = event.totalAmount,
-            orderStatus = event.newStatus,
-            version = version
-        )
+    fun logOrderStatusUpdate(
+        event: OrderStatusUpdatedEvent,
+        version: Long,
+    ) {
+        val history =
+            OrderHistory(
+                orderId = UUID.fromString(event.orderId),
+                customerId = event.customerId,
+                totalAmount = event.totalAmount,
+                orderStatus = event.newStatus,
+                version = version,
+            )
 
         save(history)
     }

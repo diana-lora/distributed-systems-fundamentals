@@ -24,14 +24,17 @@ import org.springframework.web.bind.annotation.RestController
 class OrderController(
     private val createOrderService: CreateOrderService,
     private val updateOrderService: UpdateOrderService,
-    private val getOrdersService: GetOrdersService
+    private val getOrdersService: GetOrdersService,
 ) {
     @PostMapping
-    fun createOrder(@RequestBody request: CreateOrderRequest): ResponseEntity<OrderResponse> {
-        val command = PlaceOrderCommand(
-            customerId = request.customerId,
-            totalAmount = request.totalAmount
-        )
+    fun createOrder(
+        @RequestBody request: CreateOrderRequest,
+    ): ResponseEntity<OrderResponse> {
+        val command =
+            PlaceOrderCommand(
+                customerId = request.customerId,
+                totalAmount = request.totalAmount,
+            )
 
         val savedOrder = createOrderService.execute(command)
 
@@ -41,12 +44,15 @@ class OrderController(
     }
 
     @PutMapping
-    fun updateOrder(@RequestBody request: UpdateOrderStatusRequest) {
-        val command = UpdateOrderCommand(
-            orderId = request.orderId,
-            customerId = request.customerId,
-            newStatus = request.status
-        )
+    fun updateOrder(
+        @RequestBody request: UpdateOrderStatusRequest,
+    ) {
+        val command =
+            UpdateOrderCommand(
+                orderId = request.orderId,
+                customerId = request.customerId,
+                newStatus = request.status,
+            )
 
         updateOrderService.execute(command)
     }
@@ -54,7 +60,7 @@ class OrderController(
     @GetMapping
     fun getAllOrders(
         @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "20") size: Int
+        @RequestParam(defaultValue = "20") size: Int,
     ): ResponseEntity<List<OrderResponse>> {
         val query = FindAllOrdersQuery(page = page, size = size)
 

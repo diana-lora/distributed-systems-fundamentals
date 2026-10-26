@@ -2,17 +2,17 @@ package com.example.dsf.utils
 
 import com.example.dsf.history.domain.OrderHistory
 import com.example.dsf.history.infra.db.ClickhouseOrderHistoryRepository
-import javax.sql.DataSource
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Repository
+import javax.sql.DataSource
 
 @Repository
 class ClickhouseOrderHistoryTestRepository(
-    @Qualifier("clickhouseDataSource") private val datasource: DataSource
+    @Qualifier("clickhouseDataSource") private val datasource: DataSource,
 ) : ClickhouseOrderHistoryRepository(datasource) {
-
     fun findAll(): List<OrderHistory> {
-        val sql = """
+        val sql =
+            """
             SELECT 
                 order_id,
                 argMax(customer_id, version) AS latest_customer_id,
@@ -22,7 +22,7 @@ class ClickhouseOrderHistoryTestRepository(
                 max(version) AS latest_version
             FROM order_history 
             GROUP BY order_id
-        """.trimIndent()
+            """.trimIndent()
         val records = mutableListOf<OrderHistory>()
 
         datasource.connection.use { connection ->
@@ -34,7 +34,7 @@ class ClickhouseOrderHistoryTestRepository(
                 }
             }
         }
-        log.info{ "Successfully fetched ${records.size} consolidated records from ClickHouse using FINAL execution modifier" }
+        log.info { "Successfully fetched ${records.size} consolidated records from ClickHouse using FINAL execution modifier" }
         return records
     }
 }

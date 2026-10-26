@@ -6,5 +6,5 @@ import java.util.UUID
 class UpdateOrderCommand(
     val orderId: UUID,
     val customerId: String,
-    val newStatus: OrderStatus
+    val newStatus: OrderStatus,
 )

@@ -5,6 +5,8 @@ import java.util.UUID
 
 interface OrderRepository {
     fun findById(orderId: UUID): Optional<Order>
+
     fun save(order: Order): Order
+
     fun findAll(): List<Order>
 }

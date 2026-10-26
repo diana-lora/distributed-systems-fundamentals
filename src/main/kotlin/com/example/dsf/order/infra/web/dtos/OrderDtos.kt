@@ -8,7 +8,7 @@ import java.util.UUID
 
 data class CreateOrderRequest(
     val customerId: String,
-    val totalAmount: BigDecimal
+    val totalAmount: BigDecimal,
 )
 
 data class OrderResponse(
@@ -16,21 +16,22 @@ data class OrderResponse(
     val customerId: String,
     val totalAmount: BigDecimal,
     val status: OrderStatus,
-    val createdAt: Instant
+    val createdAt: Instant,
 ) {
     companion object {
-        fun fromDomain(order: Order): OrderResponse = OrderResponse(
-            id = order.id,
-            customerId = order.customerId,
-            totalAmount = order.totalAmount,
-            status = order.status,
-            createdAt = order.createdAt
-        )
+        fun fromDomain(order: Order): OrderResponse =
+            OrderResponse(
+                id = order.id,
+                customerId = order.customerId,
+                totalAmount = order.totalAmount,
+                status = order.status,
+                createdAt = order.createdAt,
+            )
     }
 }
 
 data class UpdateOrderStatusRequest(
     val orderId: UUID,
     val customerId: String,
-    val status: OrderStatus
+    val status: OrderStatus,
 )

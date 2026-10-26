@@ -1,6 +1,7 @@
 package com.example.dsf.order.application
 
 import com.example.dsf.commons.OrderCreatedEvent
+import com.example.dsf.commons.OrderEvent
 import com.example.dsf.commons.OrderEventType.ORDER_CREATED
 import com.example.dsf.config.KafkaConfig.Companion.ORDER_EVENTS_TOPIC
 import com.example.dsf.order.application.commands.PlaceOrderCommand
@@ -16,33 +17,35 @@ import org.springframework.transaction.annotation.Transactional
 class CreateOrderService(
     private val orderRepository: OrderRepository,
     private val outboxRepository: OutboxRepository,
-    private val objectMapper: ObjectMapper
+    private val objectMapper: ObjectMapper,
 ) {
-
     @Transactional
     fun execute(command: PlaceOrderCommand): Order {
-        val order = Order(
-            customerId = command.customerId,
-            totalAmount = command.totalAmount
-        )
+        val order =
+            Order(
+                customerId = command.customerId,
+                totalAmount = command.totalAmount,
+            )
         val savedOrder = orderRepository.save(order)
 
-        val orderCreatedEvent = OrderCreatedEvent(
-            orderId = savedOrder.id.toString(),
-            customerId = savedOrder.customerId,
-            totalAmount = savedOrder.totalAmount,
-            status = savedOrder.status
-        )
-        val jsonPayload = objectMapper.writeValueAsString(orderCreatedEvent)
+        val orderCreatedEvent =
+            OrderCreatedEvent(
+                orderId = savedOrder.id.toString(),
+                customerId = savedOrder.customerId,
+                totalAmount = savedOrder.totalAmount,
+                status = savedOrder.status,
+            )
+        val jsonPayload = objectMapper.writerFor(OrderEvent::class.java).writeValueAsString(orderCreatedEvent)
 
-        val outboxEvent = OutboxEvent(
-            aggregateType = "Order",
-            aggregateId = savedOrder.id.toString(),
-            aggregateKey = savedOrder.customerId,
-            eventType = ORDER_CREATED,
-            payload = jsonPayload,
-            targetTopic = ORDER_EVENTS_TOPIC
-        )
+        val outboxEvent =
+            OutboxEvent(
+                aggregateType = "Order",
+                aggregateId = savedOrder.id.toString(),
+                aggregateKey = savedOrder.customerId,
+                eventType = ORDER_CREATED,
+                payload = jsonPayload,
+                targetTopic = ORDER_EVENTS_TOPIC,
+            )
         outboxRepository.save(outboxEvent)
 
         return savedOrder

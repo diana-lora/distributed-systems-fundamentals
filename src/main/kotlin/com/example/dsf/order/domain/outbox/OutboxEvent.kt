@@ -1,11 +1,11 @@
 package com.example.dsf.order.domain.outbox
 
 import org.springframework.data.annotation.Id
+import org.springframework.data.domain.Persistable
+import org.springframework.data.relational.core.mapping.Column
 import org.springframework.data.relational.core.mapping.Table
 import java.time.Instant
 import java.util.UUID
-import org.springframework.data.domain.Persistable
-import org.springframework.data.relational.core.mapping.Column
 
 @Table("outbox")
 data class OutboxEvent(
@@ -21,8 +21,9 @@ data class OutboxEvent(
     val payload: String,
     // Name of the kafka topic to which the event is sent
     val targetTopic: String,
-    val createdAt: Instant = Instant.now()
-): Persistable<UUID> {
+    val createdAt: Instant = Instant.now(),
+) : Persistable<UUID> {
     override fun getId(): UUID = id
+
     override fun isNew(): Boolean = true
 }

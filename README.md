@@ -73,6 +73,15 @@ The application stack is built entirely using containerized modern enterprise te
 
 ---
 
+## 🧹 Code Style
+
+Kotlin code style is enforced with [ktlint](https://pinterest.github.io/ktlint/) (rules configured in `.editorconfig`). `ktlintCheck` runs as part of `./gradlew check`.
+
+* **`./gradlew ktlintCheck`** - Reports code style violations.
+* **`./gradlew ktlintFormat`** - Automatically fixes code style violations.
+
+---
+
 ## 🔍 Troubleshooting & Useful Commands
 
 * **`docker compose ps`**

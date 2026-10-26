@@ -11,19 +11,14 @@ object OrderEventType {
     const val ORDER_STATUS_UPDATED = "ORDER_STATUS_UPDATED"
 }
 
-data class OrderEventEnvelope(
-    val type: String,
-    val payload: OrderEvent
-)
-
 @JsonTypeInfo(
     use = JsonTypeInfo.Id.NAME,
-    include = JsonTypeInfo.As.EXTERNAL_PROPERTY,
-    property = "type"
+    include = JsonTypeInfo.As.PROPERTY,
+    property = "type",
 )
 @JsonSubTypes(
     JsonSubTypes.Type(value = OrderCreatedEvent::class, name = ORDER_CREATED),
-    JsonSubTypes.Type(value = OrderStatusUpdatedEvent::class, name = ORDER_STATUS_UPDATED)
+    JsonSubTypes.Type(value = OrderStatusUpdatedEvent::class, name = ORDER_STATUS_UPDATED),
 )
 sealed interface OrderEvent
 
@@ -31,12 +26,12 @@ data class OrderCreatedEvent(
     val orderId: String,
     val customerId: String,
     val totalAmount: BigDecimal,
-    val status: OrderStatus
+    val status: OrderStatus,
 ) : OrderEvent
 
 data class OrderStatusUpdatedEvent(
     val orderId: String,
     val customerId: String,
     val totalAmount: BigDecimal,
-    val newStatus: OrderStatus
+    val newStatus: OrderStatus,
 ) : OrderEvent

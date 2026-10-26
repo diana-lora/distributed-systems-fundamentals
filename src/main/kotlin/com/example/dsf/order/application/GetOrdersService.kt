@@ -8,9 +8,8 @@ import org.springframework.transaction.annotation.Transactional
 
 @Service
 class GetOrdersService(
-    private val orderRepository: OrderRepository
+    private val orderRepository: OrderRepository,
 ) {
-
     @Transactional(readOnly = true)
     fun execute(query: FindAllOrdersQuery): List<Order> = orderRepository.findAll()
 }

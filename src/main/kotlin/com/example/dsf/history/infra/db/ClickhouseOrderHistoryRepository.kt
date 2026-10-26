@@ -4,28 +4,28 @@ import com.example.dsf.commons.OrderStatus
 import com.example.dsf.history.domain.OrderHistory
 import com.example.dsf.history.domain.OrderHistoryRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.jetbrains.annotations.TestOnly
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.stereotype.Repository
 import java.sql.ResultSet
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import javax.sql.DataSource
 import kotlin.jvm.java
-import org.jetbrains.annotations.TestOnly
-import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.stereotype.Repository
 
 @Repository
 class ClickhouseOrderHistoryRepository(
-    @Qualifier("clickhouseDataSource") private val datasource: DataSource
+    @Qualifier("clickhouseDataSource") private val datasource: DataSource,
 ) : OrderHistoryRepository {
-
     protected val log = KotlinLogging.logger {}
 
     override fun save(history: OrderHistory): OrderHistory {
-        val sql = """
+        val sql =
+            """
             INSERT INTO order_history (order_id, customer_id, total_amount, status, created_at, version)
             VALUES (?, ?, ?, ?, ?, ?)
-        """.trimIndent()
+            """.trimIndent()
 
         datasource.connection.use { connection ->
             connection.prepareStatement(sql).use { stmt ->
@@ -38,12 +38,15 @@ class ClickhouseOrderHistoryRepository(
                 stmt.executeUpdate()
             }
         }
-        log.info { "Successfully appended domain record to ClickHouse for Order ID: ${history.orderId} with version offset: ${history.version}" }
+        log.info {
+            "Successfully appended domain record to ClickHouse for Order ID: ${history.orderId} with version offset: ${history.version}"
+        }
         return history
     }
 
     fun findBefore(targetTime: java.time.Instant): List<OrderHistory> {
-        val sql = """
+        val sql =
+            """
             SELECT 
                 order_id,
                 argMax(customer_id, version) AS latest_customer_id,
@@ -54,7 +57,7 @@ class ClickhouseOrderHistoryRepository(
             FROM order_history 
             WHERE created_at <= ?
             GROUP BY order_id
-        """.trimIndent()
+            """.trimIndent()
 
         val records = mutableListOf<OrderHistory>()
 
@@ -69,18 +72,17 @@ class ClickhouseOrderHistoryRepository(
                 }
             }
         }
-        log.info{ "Time travel execution completed for timestamp: $targetTime. Found ${records.size} historical states." }
+        log.info { "Time travel execution completed for timestamp: $targetTime. Found ${records.size} historical states." }
         return records
     }
 
-    protected fun ResultSet.toOrderHistory(): OrderHistory {
-        return OrderHistory(
+    protected fun ResultSet.toOrderHistory(): OrderHistory =
+        OrderHistory(
             orderId = getObject("order_id", java.util.UUID::class.java),
             customerId = getString("latest_customer_id"),
             totalAmount = getBigDecimal("latest_total_amount"),
             orderStatus = OrderStatus.valueOf(getString("latest_status")),
             processedAt = getTimestamp("latest_created_at").toInstant(),
-            version = getLong("latest_version")
+            version = getLong("latest_version"),
         )
-    }
 }
