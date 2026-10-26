@@ -35,7 +35,6 @@ import java.util.UUID
 @SpringBootTest
 @TestPropertySource(
     properties = [
-        "app.toggle.order-history-source=clickhouse",
         "spring.kafka.consumer.group-id=order-history-clickhouse-it",
     ],
 )

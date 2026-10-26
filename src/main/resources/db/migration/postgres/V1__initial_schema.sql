@@ -22,18 +22,4 @@ CREATE TABLE outbox
     created_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3. Analytics & Reporting Table
-CREATE TABLE order_history
-(
-    id           UUID PRIMARY KEY,
-    order_id     UUID                     NOT NULL,
-    customer_id  VARCHAR(255)             NOT NULL,
-    total_amount NUMERIC(12, 2)           NOT NULL,
-    order_status VARCHAR(50)              NOT NULL,
-    version      BIGINT                   NOT NULL DEFAULT 0,
-    created_at   TIMESTAMP WITH TIME ZONE NOT NULL,
-    updated_at   TIMESTAMP WITH TIME ZONE NOT NULL
-);
-
 CREATE INDEX idx_outbox_created_at ON outbox (created_at);
-CREATE INDEX idx_order_history_customer ON order_history (customer_id);
