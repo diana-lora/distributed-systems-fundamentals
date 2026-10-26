@@ -1,5 +1,6 @@
 package com.example.dsf.history.infra.db
 
+import com.example.dsf.commons.OrderStatus
 import com.example.dsf.history.domain.OrderHistory
 import com.example.dsf.history.domain.OrderHistoryRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -31,7 +32,7 @@ class ClickhouseOrderHistoryRepository(
                 stmt.setObject(1, history.orderId)
                 stmt.setString(2, history.customerId)
                 stmt.setBigDecimal(3, history.totalAmount)
-                stmt.setString(4, history.orderStatus)
+                stmt.setString(4, history.orderStatus.name)
                 stmt.setObject(5, history.processedAt.atZone(ZoneOffset.UTC).toLocalDateTime())
                 stmt.setLong(6, history.version)
                 stmt.executeUpdate()
@@ -77,7 +78,7 @@ class ClickhouseOrderHistoryRepository(
             orderId = getObject("order_id", java.util.UUID::class.java),
             customerId = getString("latest_customer_id"),
             totalAmount = getBigDecimal("latest_total_amount"),
-            orderStatus = getString("latest_status"),
+            orderStatus = OrderStatus.valueOf(getString("latest_status")),
             processedAt = getTimestamp("latest_created_at").toInstant(),
             version = getLong("latest_version")
         )

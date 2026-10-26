@@ -1,11 +1,12 @@
 package com.example.dsf.history.domain
 
-import org.springframework.data.annotation.Id
-import org.springframework.data.relational.core.mapping.Table
+import com.example.dsf.commons.OrderStatus
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
+import org.springframework.data.annotation.Id
 import org.springframework.data.domain.Persistable
+import org.springframework.data.relational.core.mapping.Table
 
 @Table("order_history")
 data class OrderHistory(
@@ -14,7 +15,7 @@ data class OrderHistory(
     val orderId: UUID,
     val customerId: String,
     val totalAmount: BigDecimal,
-    val orderStatus: String,
+    val orderStatus: OrderStatus,
     val processedAt: Instant = Instant.now(),
     val version: Long = 0L
 ): Persistable<UUID> {

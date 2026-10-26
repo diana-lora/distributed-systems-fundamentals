@@ -1,10 +1,10 @@
 package com.example.dsf.history.application
 
 import com.example.dsf.commons.OrderCreatedEvent
+import com.example.dsf.commons.OrderStatusUpdatedEvent
 import com.example.dsf.history.domain.OrderHistory
 import com.example.dsf.history.domain.OrderHistoryRepository
 import com.example.dsf.history.infra.db.ClickhouseOrderHistoryRepository
-import java.math.BigDecimal
 import java.util.UUID
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
@@ -22,11 +22,28 @@ class ProcessOrderHistoryService(
         val history = OrderHistory(
             orderId = UUID.fromString(event.orderId),
             customerId = event.customerId,
-            totalAmount = BigDecimal(event.totalAmount),
+            totalAmount = event.totalAmount,
             orderStatus = event.status,
             version = version
         )
-        // FIXME: use enumeration instead of string
+
+        save(history)
+    }
+
+    @Transactional
+    fun logOrderStatusUpdate(event: OrderStatusUpdatedEvent, version: Long) {
+        val history = OrderHistory(
+            orderId = UUID.fromString(event.orderId),
+            customerId = event.customerId,
+            totalAmount = event.totalAmount,
+            orderStatus = event.newStatus,
+            version = version
+        )
+
+        save(history)
+    }
+
+    private fun save(history: OrderHistory) {
         when (orderHistorySource) {
             "postgres" -> orderHistoryRepository.save(history)
             "clickhouse" -> clickhouseOrderHistoryRepository.save(history)

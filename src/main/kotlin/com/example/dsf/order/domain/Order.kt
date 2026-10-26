@@ -1,5 +1,6 @@
 package com.example.dsf.order.domain
 
+import com.example.dsf.commons.OrderStatus
 import org.springframework.data.annotation.Id
 import org.springframework.data.relational.core.mapping.Table
 import java.math.BigDecimal
@@ -12,14 +13,10 @@ class Order(
     @Id
     private val id: UUID = UUID.randomUUID(),
     val customerId: String,
-    val totalAmount: BigDecimal,
-    val status: OrderStatus = OrderStatus.CREATED,
+    var totalAmount: BigDecimal,
+    var status: OrderStatus = OrderStatus.CREATED,
     val createdAt: Instant = Instant.now()
 ) : Persistable<UUID> {
     override fun getId(): UUID = id
     override fun isNew(): Boolean = true
-}
-
-enum class OrderStatus {
-    CREATED, PROCESSING, COMPLETED, CANCELLED
 }

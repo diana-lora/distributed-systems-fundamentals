@@ -11,11 +11,15 @@ import org.springframework.data.relational.core.mapping.Column
 data class OutboxEvent(
     @Id
     private val id: UUID = UUID.randomUUID(),
+    // Name of the transported entity
     @Column("aggregatetype") val aggregateType: String,
+    // Unique identifier of the payload
     @Column("aggregateid") val aggregateId: String,
+    // Determines to which kafka partition of a topic is sent. Important for concurrency control.
     val aggregateKey: String,
     @Column("type") val eventType: String,
     val payload: String,
+    // Name of the kafka topic to which the event is sent
     val targetTopic: String,
     val createdAt: Instant = Instant.now()
 ): Persistable<UUID> {

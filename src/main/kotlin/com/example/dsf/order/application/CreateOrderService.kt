@@ -1,6 +1,8 @@
 package com.example.dsf.order.application
 
 import com.example.dsf.commons.OrderCreatedEvent
+import com.example.dsf.commons.OrderEventType.ORDER_CREATED
+import com.example.dsf.config.KafkaConfig.Companion.ORDER_EVENTS_TOPIC
 import com.example.dsf.order.application.commands.PlaceOrderCommand
 import com.example.dsf.order.domain.Order
 import com.example.dsf.order.domain.OrderRepository
@@ -19,30 +21,27 @@ class CreateOrderService(
 
     @Transactional
     fun execute(command: PlaceOrderCommand): Order {
-        // 1. Create and persist the core Business Entity
         val order = Order(
             customerId = command.customerId,
             totalAmount = command.totalAmount
         )
         val savedOrder = orderRepository.save(order)
 
-        // 2. Serialize the event payload data structure
         val orderCreatedEvent = OrderCreatedEvent(
             orderId = savedOrder.id.toString(),
             customerId = savedOrder.customerId,
-            totalAmount = savedOrder.totalAmount.toString(),
-            status = savedOrder.status.name
+            totalAmount = savedOrder.totalAmount,
+            status = savedOrder.status
         )
         val jsonPayload = objectMapper.writeValueAsString(orderCreatedEvent)
 
-        // 3. Create and persist the Transactional Outbox Log Entry
         val outboxEvent = OutboxEvent(
             aggregateType = "Order",
             aggregateId = savedOrder.id.toString(),
-            aggregateKey = savedOrder.customerId, // Routes all events belonging to this customer to the same Kafka partition
-            eventType = "ORDER_CREATED",
+            aggregateKey = savedOrder.customerId,
+            eventType = ORDER_CREATED,
             payload = jsonPayload,
-            targetTopic = "order-events" // Dynamic topic routing parameter for Debezium
+            targetTopic = ORDER_EVENTS_TOPIC
         )
         outboxRepository.save(outboxEvent)
 
