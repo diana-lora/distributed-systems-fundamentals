@@ -88,7 +88,7 @@ honors columnar storage constraints:
   ```sql
   UPDATE order_history 
   SET total_amount = ? 
-  WHERE order_id = ?
+  WHERE customer_id = ? AND order_id = ?
     AND created_at >= :partitionStart AND created_at < :partitionEnd; -- Limits the patch to one partition
   ```
 * **Time Travel Verification:** Because patch parts link directly to target rows, they honor the primary key and
@@ -231,7 +231,7 @@ A single lightweight update patches the amount in **all** versions of the order 
 ```sql
 UPDATE order_history
 SET total_amount = ?
-WHERE order_id = ?
+WHERE customer_id = ? AND order_id = ?
   AND created_at >= :partitionStart
   AND created_at < :partitionEnd;
 ```

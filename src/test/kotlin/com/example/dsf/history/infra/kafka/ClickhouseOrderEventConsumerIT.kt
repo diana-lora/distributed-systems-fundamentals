@@ -2,11 +2,12 @@ package com.example.dsf.history.infra.kafka
 
 import com.example.dsf.commons.OrderStatus
 import com.example.dsf.config.KafkaConfig
-import com.example.dsf.history.infra.db.ClickhouseOrderHistoryRepository
+import com.example.dsf.history.domain.OrderHistory
 import com.example.dsf.order.application.CreateOrderService
 import com.example.dsf.order.application.UpdateOrderService
 import com.example.dsf.order.application.commands.PlaceOrderCommand
-import com.example.dsf.order.application.commands.UpdateOrderCommand
+import com.example.dsf.order.application.commands.UpdateOrderStatusCommand
+import com.example.dsf.order.application.commands.UpdateOrderTotalAmountCommand
 import com.example.dsf.utils.ClickhouseOrderHistoryTestRepository
 import com.example.dsf.utils.IntegrationTestContainers
 import org.apache.kafka.clients.consumer.ConsumerConfig
@@ -97,7 +98,7 @@ class ClickhouseOrderEventConsumerIT : IntegrationTestContainers() {
         Thread.sleep(10)
 
         updateOrderService.execute(
-            UpdateOrderCommand(
+            UpdateOrderStatusCommand(
                 orderId = order.id,
                 customerId = customerId,
                 newStatus = OrderStatus.PROCESSING,
@@ -128,6 +129,68 @@ class ClickhouseOrderEventConsumerIT : IntegrationTestContainers() {
         historyRepository.optimizeFinal()
         val snapshotAfterMerge = historyRepository.findBefore(timeBeforeUpdate).single { it.orderId == order.id }
         assertThat(snapshotAfterMerge.orderStatus).isEqualTo(OrderStatus.CREATED)
+    }
+
+    @Test
+    fun `should patch total amount in every history version without changing the status timeline`() {
+        val customerId = "customer-amount-${UUID.randomUUID()}"
+        val wrongAmount = BigDecimal("99.00")
+        val correctAmount = BigDecimal("9.90")
+        val order = createOrderService.execute(PlaceOrderCommand(customerId, wrongAmount))
+
+        await.atMost(Duration.ofSeconds(15)).pollInterval(Duration.ofMillis(250)).untilAsserted {
+            val records = historyRepository.findByOrderId(order.id)
+            assertThat(records).hasSize(1)
+            assertThat(records.first().orderStatus).isEqualTo(OrderStatus.CREATED)
+        }
+
+        val timeBeforeStatusUpdate = Instant.now()
+        Thread.sleep(10)
+
+        updateOrderService.execute(
+            UpdateOrderStatusCommand(
+                orderId = order.id,
+                customerId = customerId,
+                newStatus = OrderStatus.PROCESSING,
+            ),
+        )
+
+        lateinit var processingSnapshot: OrderHistory
+        await.atMost(Duration.ofSeconds(15)).pollInterval(Duration.ofMillis(250)).untilAsserted {
+            val records = historyRepository.findByOrderId(order.id)
+            assertThat(records).hasSize(1)
+            processingSnapshot = records.first()
+            assertThat(processingSnapshot.orderStatus).isEqualTo(OrderStatus.PROCESSING)
+        }
+
+        updateOrderService.execute(
+            UpdateOrderTotalAmountCommand(
+                orderId = order.id,
+                customerId = customerId,
+                newTotalAmount = correctAmount,
+            ),
+        )
+
+        await.atMost(Duration.ofSeconds(15)).pollInterval(Duration.ofMillis(250)).untilAsserted {
+            val records = historyRepository.findByOrderId(order.id)
+            assertThat(records).hasSize(1)
+            val record = records.first()
+            assertThat(record.totalAmount).isEqualByComparingTo(correctAmount)
+            // The patch must not create a new version or move the timeline
+            assertThat(record.orderStatus).isEqualTo(OrderStatus.PROCESSING)
+            assertThat(record.version).isEqualTo(processingSnapshot.version)
+            assertThat(record.updatedAt).isEqualTo(processingSnapshot.updatedAt)
+        }
+
+        // Every past snapshot returns the corrected amount, not only the latest version
+        val snapshotBeforeStatusUpdate = historyRepository.findBefore(timeBeforeStatusUpdate).single { it.orderId == order.id }
+        assertThat(snapshotBeforeStatusUpdate.orderStatus).isEqualTo(OrderStatus.CREATED)
+        assertThat(snapshotBeforeStatusUpdate.totalAmount).isEqualByComparingTo(correctAmount)
+
+        historyRepository.optimizeFinal()
+        val snapshotAfterMerge = historyRepository.findBefore(timeBeforeStatusUpdate).single { it.orderId == order.id }
+        assertThat(snapshotAfterMerge.orderStatus).isEqualTo(OrderStatus.CREATED)
+        assertThat(snapshotAfterMerge.totalAmount).isEqualByComparingTo(correctAmount)
     }
 
     @Test

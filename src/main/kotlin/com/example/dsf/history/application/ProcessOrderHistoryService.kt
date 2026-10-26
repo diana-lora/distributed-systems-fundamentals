@@ -2,6 +2,7 @@ package com.example.dsf.history.application
 
 import com.example.dsf.commons.OrderCreatedEvent
 import com.example.dsf.commons.OrderStatusUpdatedEvent
+import com.example.dsf.commons.OrderTotalAmountUpdateEvent
 import com.example.dsf.history.domain.OrderHistory
 import com.example.dsf.history.domain.OrderHistoryRepository
 import com.example.dsf.history.infra.db.ClickhouseOrderHistoryRepository
@@ -55,11 +56,24 @@ class ProcessOrderHistoryService(
         save(history)
     }
 
+    @Transactional
+    fun correctOrderTotalAmount(event: OrderTotalAmountUpdateEvent) {
+        activeRepository().updateTotalAmount(
+            orderId = UUID.fromString(event.orderId),
+            customerId = event.customerId,
+            createdAt = event.createdAt,
+            newTotalAmount = event.newTotalAmount,
+        )
+    }
+
     private fun save(history: OrderHistory) {
+        activeRepository().save(history)
+    }
+
+    private fun activeRepository(): OrderHistoryRepository =
         when (orderHistorySource) {
-            "postgres" -> orderHistoryRepository.save(history)
-            "clickhouse" -> clickhouseOrderHistoryRepository.save(history)
+            "postgres" -> orderHistoryRepository
+            "clickhouse" -> clickhouseOrderHistoryRepository
             else -> throw IllegalArgumentException("Invalid order history source: $orderHistorySource")
         }
-    }
 }

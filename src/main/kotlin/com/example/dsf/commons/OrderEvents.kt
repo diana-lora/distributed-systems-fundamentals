@@ -2,6 +2,7 @@ package com.example.dsf.commons
 
 import com.example.dsf.commons.OrderEventType.ORDER_CREATED
 import com.example.dsf.commons.OrderEventType.ORDER_STATUS_UPDATED
+import com.example.dsf.commons.OrderEventType.ORDER_TOTAL_AMOUNT_UPDATED
 import com.fasterxml.jackson.annotation.JsonSubTypes
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 import java.math.BigDecimal
@@ -10,6 +11,7 @@ import java.time.Instant
 object OrderEventType {
     const val ORDER_CREATED = "ORDER_CREATED"
     const val ORDER_STATUS_UPDATED = "ORDER_STATUS_UPDATED"
+    const val ORDER_TOTAL_AMOUNT_UPDATED = "ORDER_TOTAL_AMOUNT_UPDATED"
 }
 
 @JsonTypeInfo(
@@ -20,6 +22,7 @@ object OrderEventType {
 @JsonSubTypes(
     JsonSubTypes.Type(value = OrderCreatedEvent::class, name = ORDER_CREATED),
     JsonSubTypes.Type(value = OrderStatusUpdatedEvent::class, name = ORDER_STATUS_UPDATED),
+    JsonSubTypes.Type(value = OrderTotalAmountUpdateEvent::class, name = ORDER_TOTAL_AMOUNT_UPDATED),
 )
 sealed interface OrderEvent
 
@@ -39,4 +42,13 @@ data class OrderStatusUpdatedEvent(
     val newStatus: OrderStatus,
     val createdAt: Instant,
     val updatedAt: Instant,
+) : OrderEvent
+
+// Retroactive correction: patches the amount in every history version, so it carries no status or updatedAt
+data class OrderTotalAmountUpdateEvent(
+    val orderId: String,
+    val customerId: String,
+    val newTotalAmount: BigDecimal,
+    // Locates the history partition (toYYYYMM(created_at)) that holds every version of the order
+    val createdAt: Instant,
 ) : OrderEvent

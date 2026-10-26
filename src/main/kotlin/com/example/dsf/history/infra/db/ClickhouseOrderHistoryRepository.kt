@@ -9,13 +9,17 @@ import org.jetbrains.annotations.TestOnly
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Repository
+import java.math.BigDecimal
 import java.sql.ResultSet
+import java.time.Instant
 import java.time.LocalDateTime
+import java.time.ZoneOffset
+import java.util.UUID
 import javax.sql.DataSource
 import kotlin.jvm.java
 
 @Repository
-class ClickhouseOrderHistoryRepository(
+open class ClickhouseOrderHistoryRepository(
     @Qualifier("clickhouseDataSource") private val datasource: DataSource,
 ) : OrderHistoryRepository {
     protected val log = KotlinLogging.logger {}
@@ -44,6 +48,54 @@ class ClickhouseOrderHistoryRepository(
             "Successfully appended domain record to ClickHouse for Order ID: ${history.orderId} with version offset: ${history.version}"
         }
         return history
+    }
+
+    /**
+     * Retroactively corrects the total amount of an order in **all** its versions (lightweight update).
+     *
+     * **Why an update instead of an append:** every event carries the full order state, so a wrong amount is copied
+     * into every version. An appended row would only replace one version in `argMax`, so earlier snapshots would keep
+     * the wrong value. The lightweight `UPDATE` writes a small patch part that every read applies, so all snapshots
+     * return the corrected amount while `status`, `updated_at` and `version` stay untouched.
+     *
+     * **How the patch is restricted to one partition:** all versions of an order share the same `created_at`, so the
+     * table partition `toYYYYMM(created_at)` is computed from [createdAt]. The `created_at` range from the start of
+     * that month (UTC) to the start of the next month lets ClickHouse skip every other partition, while
+     * `customer_id` and `order_id` match the prefix of the sorting key.
+     */
+    override fun updateTotalAmount(
+        orderId: UUID,
+        customerId: String,
+        createdAt: Instant,
+        newTotalAmount: BigDecimal,
+    ) {
+        val sql =
+            """
+            UPDATE order_history
+            SET total_amount = ?
+            WHERE customer_id = ? AND order_id = ?
+              AND created_at >= ? AND created_at < ?
+            """.trimIndent()
+
+        val partitionStart =
+            createdAt
+                .atZone(ZoneOffset.UTC)
+                .toLocalDate()
+                .withDayOfMonth(1)
+                .atStartOfDay(ZoneOffset.UTC)
+        val partitionEnd = partitionStart.plusMonths(1)
+
+        datasource.connection.use { connection ->
+            connection.prepareStatement(sql).use { stmt ->
+                stmt.setBigDecimal(1, newTotalAmount)
+                stmt.setString(2, customerId)
+                stmt.setObject(3, orderId)
+                stmt.setObject(4, partitionStart.toInstant())
+                stmt.setObject(5, partitionEnd.toInstant())
+                stmt.executeUpdate()
+            }
+        }
+        log.info { "Successfully patched total amount in ClickHouse for Order ID: $orderId to $newTotalAmount" }
     }
 
     /**

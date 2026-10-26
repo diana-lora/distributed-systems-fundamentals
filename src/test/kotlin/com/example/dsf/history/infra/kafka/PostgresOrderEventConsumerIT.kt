@@ -6,7 +6,8 @@ import com.example.dsf.history.infra.db.PostgresOrderHistoryRepository
 import com.example.dsf.order.application.CreateOrderService
 import com.example.dsf.order.application.UpdateOrderService
 import com.example.dsf.order.application.commands.PlaceOrderCommand
-import com.example.dsf.order.application.commands.UpdateOrderCommand
+import com.example.dsf.order.application.commands.UpdateOrderStatusCommand
+import com.example.dsf.order.application.commands.UpdateOrderTotalAmountCommand
 import com.example.dsf.utils.IntegrationTestContainers
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.ConsumerRecord
@@ -86,7 +87,7 @@ class PostgresOrderEventConsumerIT : IntegrationTestContainers() {
         }
 
         updateOrderService.execute(
-            UpdateOrderCommand(
+            UpdateOrderStatusCommand(
                 orderId = order.id,
                 customerId = customerId,
                 newStatus = OrderStatus.PROCESSING,
@@ -102,6 +103,49 @@ class PostgresOrderEventConsumerIT : IntegrationTestContainers() {
             assertThat(records).allSatisfy { record ->
                 assertThat(record.customerId).isEqualTo(customerId)
                 assertThat(record.totalAmount).isEqualByComparingTo(totalAmount)
+            }
+        }
+    }
+
+    @Test
+    fun `should correct total amount in every history version of the order`() {
+        val customerId = "customer-amount-${UUID.randomUUID()}"
+        val wrongAmount = BigDecimal("99.00")
+        val correctAmount = BigDecimal("9.90")
+        val order = createOrderService.execute(PlaceOrderCommand(customerId, wrongAmount))
+
+        await.atMost(Duration.ofSeconds(15)).pollInterval(Duration.ofMillis(250)).untilAsserted {
+            assertThat(historyRepository.findAll().filter { it.orderId == order.id }).hasSize(1)
+        }
+
+        updateOrderService.execute(
+            UpdateOrderStatusCommand(
+                orderId = order.id,
+                customerId = customerId,
+                newStatus = OrderStatus.PROCESSING,
+            ),
+        )
+
+        await.atMost(Duration.ofSeconds(15)).pollInterval(Duration.ofMillis(250)).untilAsserted {
+            assertThat(historyRepository.findAll().filter { it.orderId == order.id }).hasSize(2)
+        }
+
+        updateOrderService.execute(
+            UpdateOrderTotalAmountCommand(
+                orderId = order.id,
+                customerId = customerId,
+                newTotalAmount = correctAmount,
+            ),
+        )
+
+        await.atMost(Duration.ofSeconds(15)).pollInterval(Duration.ofMillis(250)).untilAsserted {
+            val records = historyRepository.findAll().filter { it.orderId == order.id }
+            // The correction patches existing rows instead of appending a new version
+            assertThat(records).hasSize(2)
+            assertThat(records.map { it.orderStatus })
+                .containsExactlyInAnyOrder(OrderStatus.CREATED, OrderStatus.PROCESSING)
+            assertThat(records).allSatisfy { record ->
+                assertThat(record.totalAmount).isEqualByComparingTo(correctAmount)
             }
         }
     }

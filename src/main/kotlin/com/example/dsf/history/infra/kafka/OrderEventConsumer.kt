@@ -3,6 +3,7 @@ package com.example.dsf.history.infra.kafka
 import com.example.dsf.commons.OrderCreatedEvent
 import com.example.dsf.commons.OrderEvent
 import com.example.dsf.commons.OrderStatusUpdatedEvent
+import com.example.dsf.commons.OrderTotalAmountUpdateEvent
 import com.example.dsf.config.KafkaConfig
 import com.example.dsf.history.application.ProcessOrderHistoryService
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -39,6 +40,11 @@ class OrderEventConsumer(
                 is OrderStatusUpdatedEvent -> {
                     log.info("Updating event's status for Order ID: ${event.orderId} to ${event.newStatus}")
                     processOrderHistoryService.logOrderStatusUpdate(event = event, version = offset)
+                }
+
+                is OrderTotalAmountUpdateEvent -> {
+                    log.info("Correcting total amount for Order ID: ${event.orderId} to ${event.newTotalAmount}")
+                    processOrderHistoryService.correctOrderTotalAmount(event = event)
                 }
             }
         } catch (ex: Exception) {

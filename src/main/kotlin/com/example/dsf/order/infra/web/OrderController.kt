@@ -4,11 +4,13 @@ import com.example.dsf.order.application.CreateOrderService
 import com.example.dsf.order.application.GetOrdersService
 import com.example.dsf.order.application.UpdateOrderService
 import com.example.dsf.order.application.commands.PlaceOrderCommand
-import com.example.dsf.order.application.commands.UpdateOrderCommand
+import com.example.dsf.order.application.commands.UpdateOrderStatusCommand
+import com.example.dsf.order.application.commands.UpdateOrderTotalAmountCommand
 import com.example.dsf.order.application.queries.FindAllOrdersQuery
 import com.example.dsf.order.infra.web.dtos.CreateOrderRequest
 import com.example.dsf.order.infra.web.dtos.OrderResponse
 import com.example.dsf.order.infra.web.dtos.UpdateOrderStatusRequest
+import com.example.dsf.order.infra.web.dtos.UpdateOrderTotalAmountRequest
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
@@ -43,15 +45,29 @@ class OrderController(
             .body(OrderResponse.fromDomain(savedOrder))
     }
 
-    @PutMapping
-    fun updateOrder(
+    @PutMapping("/status")
+    fun updateOrderStatus(
         @RequestBody request: UpdateOrderStatusRequest,
     ) {
         val command =
-            UpdateOrderCommand(
+            UpdateOrderStatusCommand(
                 orderId = request.orderId,
                 customerId = request.customerId,
                 newStatus = request.status,
+            )
+
+        updateOrderService.execute(command)
+    }
+
+    @PutMapping("/totalAmount")
+    fun updateOrderTotalAmount(
+        @RequestBody request: UpdateOrderTotalAmountRequest,
+    ) {
+        val command =
+            UpdateOrderTotalAmountCommand(
+                orderId = request.orderId,
+                customerId = request.customerId,
+                newTotalAmount = request.totalAmount,
             )
 
         updateOrderService.execute(command)
