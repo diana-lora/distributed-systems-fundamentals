@@ -6,7 +6,6 @@ import com.example.dsf.order.application.UpdateOrderService
 import com.example.dsf.order.application.commands.PlaceOrderCommand
 import com.example.dsf.order.application.commands.UpdateOrderStatusCommand
 import com.example.dsf.order.application.commands.UpdateOrderTotalAmountCommand
-import com.example.dsf.order.application.queries.FindAllOrdersQuery
 import com.example.dsf.order.infra.web.dtos.CreateOrderRequest
 import com.example.dsf.order.infra.web.dtos.OrderResponse
 import com.example.dsf.order.infra.web.dtos.UpdateOrderStatusRequest
@@ -74,13 +73,8 @@ class OrderController(
     }
 
     @GetMapping
-    fun getAllOrders(
-        @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "20") size: Int,
-    ): ResponseEntity<List<OrderResponse>> {
-        val query = FindAllOrdersQuery(page = page, size = size)
-
-        val ordersList = getOrdersService.execute(query)
+    fun getAllOrders(): ResponseEntity<List<OrderResponse>> {
+        val ordersList = getOrdersService.execute()
 
         val responseList = ordersList.map { OrderResponse.fromDomain(it) }
         return ResponseEntity.ok(responseList)
