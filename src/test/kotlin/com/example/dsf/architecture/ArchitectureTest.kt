@@ -78,8 +78,9 @@ internal class OrderArchitectureTest {
 
     @Test
     fun `infrastructure package should not depend on external feature packages`() {
+        // Production code only: tests in this package legitimately use shared test utilities and configuration
         Konsist
-            .scopeFromProject()
+            .scopeFromProduction()
             .files
             .withPackage("$INFRASTRUCTURE_PACKAGE..")
             .assertTrue { file ->

@@ -151,7 +151,7 @@ lands in the same monthly partition. `updated_at` is part of the sorting key `(c
 `ReplacingMergeTree` only merges rows that describe the **same point in time** of an order and never deletes earlier
 states.
 
-All snapshots below are produced by `ClickhouseOrderHistoryRepository.findBefore(targetTime)` (see its KDoc). The query
+All snapshots below are produced by `ClickhouseOrderHistoryRepository.findBy(targetTime)` (see its KDoc). The query
 works in three steps:
 
 1. `created_at <= targetTime` skips whole monthly partitions of orders that did not exist yet.
@@ -190,7 +190,7 @@ in step 2 (which versions already existed) and step 3 (which of them is the newe
 
 Merges only remove true duplicates, i.e. rows with the same `updated_at`: for example, a Kafka redelivery of `v102`
 (same version, removed) or a corrupted row replaced by a backdated rebuild (Scenario 5). The integration test
-`ClickhouseOrderEventConsumerIT` forces a merge with `OPTIMIZE TABLE order_history FINAL` and verifies that the
+`OrderEventConsumerIT` forces a merge with `OPTIMIZE TABLE order_history FINAL` and verifies that the
 `CREATED` state is still returned afterwards.
 
 ### Scenario 3: Retroactive Total Amount Correction

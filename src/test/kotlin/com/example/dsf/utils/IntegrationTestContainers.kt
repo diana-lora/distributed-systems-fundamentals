@@ -2,8 +2,13 @@ package com.example.dsf.utils
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.BeforeEach
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
+import org.springframework.test.context.TestPropertySource
+import org.springframework.test.web.servlet.MockMvc
 import org.testcontainers.clickhouse.ClickHouseContainer
 import org.testcontainers.containers.GenericContainer
 import org.testcontainers.containers.Network
@@ -18,7 +23,17 @@ import java.net.http.HttpResponse
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicBoolean
 
+// Every IT uses the same configuration, so they all share one cached Spring context and one Kafka consumer
+@SpringBootTest
+@AutoConfigureMockMvc
+@TestPropertySource(properties = ["spring.kafka.consumer.group-id=order-history-it"])
 abstract class IntegrationTestContainers {
+    @Autowired
+    protected lateinit var mockMvc: MockMvc
+
+    @Autowired
+    protected lateinit var objectMapper: ObjectMapper
+
     companion object {
         private const val CONNECT_PORT = 8083
         private const val KAFKA_INTERNAL_LISTENER = "kafka:19092"

@@ -1,22 +1,20 @@
 package com.example.dsf.history.infra.db
 
 import com.example.dsf.commons.OrderStatus
+import com.example.dsf.commons.monthPartitionRange
 import com.example.dsf.commons.toUtcInstant
+import com.example.dsf.history.application.queries.GetOrderHistoryQuery
 import com.example.dsf.history.domain.OrderHistory
 import com.example.dsf.history.domain.OrderHistoryRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.jetbrains.annotations.TestOnly
-import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Repository
 import java.math.BigDecimal
 import java.sql.ResultSet
 import java.time.Instant
 import java.time.LocalDateTime
-import java.time.ZoneOffset
 import java.util.UUID
 import javax.sql.DataSource
-import kotlin.jvm.java
 
 @Repository
 open class ClickhouseOrderHistoryRepository(
@@ -77,21 +75,15 @@ open class ClickhouseOrderHistoryRepository(
               AND created_at >= ? AND created_at < ?
             """.trimIndent()
 
-        val partitionStart =
-            createdAt
-                .atZone(ZoneOffset.UTC)
-                .toLocalDate()
-                .withDayOfMonth(1)
-                .atStartOfDay(ZoneOffset.UTC)
-        val partitionEnd = partitionStart.plusMonths(1)
+        val (partitionStart, partitionEnd) = monthPartitionRange(createdAt)
 
         datasource.connection.use { connection ->
             connection.prepareStatement(sql).use { stmt ->
                 stmt.setBigDecimal(1, newTotalAmount)
                 stmt.setString(2, customerId)
                 stmt.setObject(3, orderId)
-                stmt.setObject(4, partitionStart.toInstant())
-                stmt.setObject(5, partitionEnd.toInstant())
+                stmt.setObject(4, partitionStart)
+                stmt.setObject(5, partitionEnd)
                 stmt.executeUpdate()
             }
         }
@@ -112,7 +104,10 @@ open class ClickhouseOrderHistoryRepository(
      * skip all monthly partitions newer than [targetTime] without reading them. Inside the remaining partitions,
      * `updated_at <= ?` drops the versions that happened after [targetTime] before the aggregation runs.
      */
-    fun findBefore(targetTime: java.time.Instant): List<OrderHistory> {
+    override fun findBy(query: GetOrderHistoryQuery): List<OrderHistory> {
+        val customerFilter = if (query.customerId != null) "AND customer_id = ?" else ""
+        val orderFilter = if (query.orderId != null) "AND order_id = ?" else ""
+
         val sql =
             """
             SELECT
@@ -125,6 +120,8 @@ open class ClickhouseOrderHistoryRepository(
                 max(version) AS latest_version
             FROM order_history
             WHERE created_at <= ? AND updated_at <= ?
+                $customerFilter
+                $orderFilter
             GROUP BY order_id
             """.trimIndent()
 
@@ -132,8 +129,12 @@ open class ClickhouseOrderHistoryRepository(
 
         datasource.connection.use { connection ->
             connection.prepareStatement(sql).use { stmt ->
-                stmt.setObject(1, targetTime)
-                stmt.setObject(2, targetTime)
+                stmt.setObject(1, query.targetTime)
+                stmt.setObject(2, query.targetTime)
+                // Optional filters take the next free placeholder, in the same order as in the SQL text
+                var parameterIndex = 3
+                query.customerId?.let { stmt.setString(parameterIndex++, it) }
+                query.orderId?.let { stmt.setObject(parameterIndex, it) }
 
                 stmt.executeQuery().use { resultSet ->
                     while (resultSet.next()) {
@@ -142,7 +143,10 @@ open class ClickhouseOrderHistoryRepository(
                 }
             }
         }
-        log.info { "Time travel execution completed for timestamp: $targetTime. Found ${records.size} historical states." }
+        log.info {
+            "Time travel execution completed for timestamp: ${query.targetTime} " +
+                "(customerId=${query.customerId}, orderId=${query.orderId}). Found ${records.size} historical states."
+        }
         return records
     }
 

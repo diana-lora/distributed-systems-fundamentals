@@ -1,0 +1,74 @@
+package com.example.dsf.order.infra.web
+
+import com.example.dsf.order.application.CreateOrderService
+import com.example.dsf.order.application.GetOrdersService
+import com.example.dsf.order.application.UpdateOrderService
+import com.example.dsf.order.application.commands.UpdateOrderStatusCommand
+import com.example.dsf.order.application.commands.UpdateOrderTotalAmountCommand
+import com.example.dsf.order.domain.exceptions.OrderNotFoundException
+import com.ninjasquad.springmockk.MockkBean
+import io.mockk.every
+import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
+import org.springframework.http.MediaType
+import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.post
+import org.springframework.test.web.servlet.put
+import java.util.UUID
+
+@WebMvcTest(OrderController::class)
+class OrderControllerWebMvcTest {
+    @Autowired
+    private lateinit var mockMvc: MockMvc
+
+    @MockkBean
+    private lateinit var createOrderService: CreateOrderService
+
+    @MockkBean
+    private lateinit var updateOrderService: UpdateOrderService
+
+    @MockkBean
+    private lateinit var getOrdersService: GetOrdersService
+
+    private val unknownOrderId = UUID.randomUUID()
+
+    @Test
+    fun `should return 404 when updating the status of an unknown order`() {
+        every { updateOrderService.execute(any<UpdateOrderStatusCommand>()) } throws
+            OrderNotFoundException("Order not found (ID=$unknownOrderId)")
+
+        mockMvc
+            .put("/orders/status") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"orderId": "$unknownOrderId", "customerId": "customer-1", "status": "PROCESSING"}"""
+            }.andExpect {
+                status { isNotFound() }
+                jsonPath("$.detail") { value("Order not found (ID=$unknownOrderId)") }
+            }
+    }
+
+    @Test
+    fun `should return 404 when correcting the total amount of an unknown order`() {
+        every { updateOrderService.execute(any<UpdateOrderTotalAmountCommand>()) } throws
+            OrderNotFoundException("Order not found (ID=$unknownOrderId)")
+
+        mockMvc
+            .put("/orders/totalAmount") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"orderId": "$unknownOrderId", "customerId": "customer-1", "totalAmount": 9.90}"""
+            }.andExpect {
+                status { isNotFound() }
+                jsonPath("$.detail") { value("Order not found (ID=$unknownOrderId)") }
+            }
+    }
+
+    @Test
+    fun `should return 400 for a malformed request body`() {
+        mockMvc
+            .post("/orders") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"customerId": "customer-1", "totalAmount": "not-a-number"}"""
+            }.andExpect { status { isBadRequest() } }
+    }
+}
