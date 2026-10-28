@@ -66,9 +66,8 @@ class UpdateOrderService(
     }
 
     private fun findOrder(orderId: UUID): Order =
-        orderRepository
-            .findById(orderId)
-            .orElseThrow { OrderNotFoundException("Order not found (ID=$orderId)") }
+        orderRepository.findOrderById(orderId)
+            ?: throw OrderNotFoundException("Order not found (ID=$orderId)")
 
     private fun saveToOutbox(
         order: Order,

@@ -23,7 +23,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.math.BigDecimal
 import java.time.Instant
-import java.util.Optional
 import java.util.UUID
 
 class UpdateOrderServiceTest {
@@ -42,7 +41,7 @@ class UpdateOrderServiceTest {
     private val outboxEvent = slot<OutboxEvent>()
 
     private fun givenExistingOrder() {
-        every { orderRepository.findById(order.id) } returns Optional.of(order)
+        every { orderRepository.findOrderById(order.id) } returns order
         every { orderRepository.save(any()) } answers { firstArg() }
         every { outboxRepository.save(capture(outboxEvent)) } answers { firstArg() }
     }
@@ -88,7 +87,7 @@ class UpdateOrderServiceTest {
     @Test
     fun `should throw and save nothing when the order does not exist`() {
         val unknownOrderId = UUID.randomUUID()
-        every { orderRepository.findById(unknownOrderId) } returns Optional.empty()
+        every { orderRepository.findOrderById(unknownOrderId) } returns null
 
         assertThrows<OrderNotFoundException> {
             service.execute(UpdateOrderStatusCommand(unknownOrderId, "customer-1", OrderStatus.PROCESSING))

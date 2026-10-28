@@ -129,7 +129,7 @@ class OrderControllerIT : IntegrationTestContainers() {
         return objectMapper.readValue(response)
     }
 
-    private fun findOrder(orderId: UUID): Order = orderRepository.findById(orderId).orElseThrow()
+    private fun findOrder(orderId: UUID): Order = checkNotNull(orderRepository.findOrderById(orderId))
 
     private fun findOutboxEvents(orderId: UUID): List<OutboxEvent> =
         outboxRepository.findAll().filter { it.aggregateId == orderId.toString() }
