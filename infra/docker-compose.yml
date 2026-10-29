@@ -94,6 +94,8 @@ services:
       context: ..
       dockerfile: Dockerfile
     container_name: outbox-spring-app
+    # Only started with `--profile app`, so the app can run in IntelliJ against the rest of the stack
+    profiles: [ "app" ]
     ports:
       - "8080:8080"
     # Ensure application waits until the databases and the Message Broker are fully healthy
@@ -124,9 +126,7 @@ services:
       postgres:
         condition: service_healthy
       kafka:
-          condition: service_healthy
-#      app:
-#        condition: service_started
+        condition: service_healthy
     environment:
       BOOTSTRAP_SERVERS: kafka:29092
       GROUP_ID: 1

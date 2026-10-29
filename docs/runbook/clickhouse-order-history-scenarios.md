@@ -13,9 +13,9 @@ explains why the results look the way they do.
    ```bash
    ./gradlew clean bootJar
    cd infra
-   docker compose up --build -d
+   docker compose --profile app up --build -d
    ```
-2. If the stack ran before, remove its volumes first with `docker compose down -v`. The demo orders are inserted only
+2. If the stack ran before, remove its volumes first with `docker compose --profile app down -v`. The demo orders are inserted only
    once per database, and an existing database may hold an older schema.
 3. Wait until the application is healthy: `curl -s http://localhost:8080/actuator/health` returns `"status":"UP"`.
 4. Wait until the demo orders reach the order history (usually a few seconds after the connector is running):
@@ -196,5 +196,5 @@ consumer failed, follow [Kafka Poison Pill Inspection and Re-drive](kafka-poison
 Remove all containers and volumes to start again with only the demo orders:
 
 ```bash
-docker compose down -v
+docker compose --profile app down -v
 ```

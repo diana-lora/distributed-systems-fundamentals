@@ -53,7 +53,7 @@ The application stack is built entirely using containerized modern enterprise te
 3. **`cd infra`**
    Navigates into the infrastructure folder containing the orchestrator configuration assets.
 
-4. **`docker compose up --build -d`**
+4. **`docker compose --profile app up --build -d`**
    Builds the custom Debezium image and spins up the entire architectural service stack in the background.
 
 5. **Verify `http://localhost:8080/actuator/health`**
@@ -65,10 +65,10 @@ The application stack is built entirely using containerized modern enterprise te
 7. **Verify `http://localhost:8083/connectors`**
    Queries the Debezium Connect REST API directly to verify the connector engine status and view active configurations.
 
-8. **`docker compose down`**
+8. **`docker compose --profile app down`**
    Stops and removes all running infrastructure containers safely when you are finished developing.
 
-9. **`docker compose down -v`**
+9. **`docker compose --profile app down -v`**
    Stops the containers and permanently deletes the local PostgreSQL database data volumes to trigger a fresh Flyway migration on the next run.
 
 ---
@@ -96,7 +96,7 @@ Kotlin code style is enforced with [ktlint](https://pinterest.github.io/ktlint/)
 * **`docker compose build --no-cache`**
   Forces Docker to completely wipe out its internal build memory layers and download all script assets fresh, bypassing corrupted local caches.
 
-* **`docker compose down -v`**
+* **`docker compose --profile app down -v`**
   Stops all running containers and permanently deletes the local PostgreSQL database data volumes, allowing you to re-run Flyway migrations from scratch.
 
 * **`curl http://localhost:8083/connectors`**
