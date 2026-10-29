@@ -1,17 +1,19 @@
 package com.example.dsf.history
 
 import com.example.dsf.commons.OrderStatus
+import com.example.dsf.history.domain.OrderHistory
 import com.example.dsf.history.infra.web.dtos.OrderHistoryResponse
 import com.example.dsf.order.infra.web.dtos.CreateOrderRequest
 import com.example.dsf.order.infra.web.dtos.OrderResponse
 import com.example.dsf.order.infra.web.dtos.UpdateOrderStatusRequest
 import com.example.dsf.order.infra.web.dtos.UpdateOrderTotalAmountRequest
+import com.example.dsf.utils.ClickhouseOrderHistoryTestRepository
 import com.example.dsf.utils.IntegrationTestContainers
 import com.fasterxml.jackson.module.kotlin.readValue
 import org.assertj.core.api.Assertions.assertThat
 import org.awaitility.kotlin.await
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
@@ -27,6 +29,9 @@ import java.util.UUID
  * back with `GET /ordersHistory`.
  */
 class OrderHistoryTimeTravelIT : IntegrationTestContainers() {
+    @Autowired
+    private lateinit var historyRepository: ClickhouseOrderHistoryTestRepository
+
     @Test
     fun `order status update returns the status valid at each point in time`() {
         val customerId = "customer-status-${UUID.randomUUID()}"
@@ -76,12 +81,42 @@ class OrderHistoryTimeTravelIT : IntegrationTestContainers() {
     }
 
     @Test
-    @Disabled("History rebuild with backdated versions is not implemented yet")
     fun `history rebuild with backdated versions repairs the corrupted state from the moment it happened`() {
-        // 1. Create an order and wait for the CREATED snapshot.
-        // 2. Store a corrupted status version (e.g. COMPLETED instead of PROCESSING).
-        // 3. Trigger the history rebuild, which inserts the repaired state backdated to the corrupted updatedAt.
-        // 4. Assert that a snapshot between the corruption and the rebuild already returns the repaired status.
+        val customerId = "customer-rebuild-${UUID.randomUUID()}"
+        val orderId = createOrder(customerId, BigDecimal("49.90"))
+        val createdTime = awaitLatestState(orderId) { assertThat(it.status).isEqualTo(OrderStatus.CREATED) }.updatedAt
+
+        Thread.sleep(50)
+        updateStatus(orderId, customerId, OrderStatus.PROCESSING)
+        val processingTime = awaitLatestState(orderId) { assertThat(it.status).isEqualTo(OrderStatus.PROCESSING) }.updatedAt
+        val processingVersion = historyRepository.findByOrderId(orderId).single().version
+
+        // Drift: a COMPLETED state that never happened in PostgreSQL, stored directly in ClickHouse
+        val corruptedTime = processingTime.plusSeconds(1)
+        historyRepository.save(
+            OrderHistory(orderId, customerId, BigDecimal("49.90"), OrderStatus.COMPLETED, createdTime, corruptedTime, processingVersion),
+        )
+        assertThat(getSnapshot(orderId, corruptedTime).status).isEqualTo(OrderStatus.COMPLETED)
+
+        repairHistory(orderId)
+        await.atMost(Duration.ofSeconds(15)).pollInterval(Duration.ofMillis(250)).untilAsserted {
+            // Only the repaired CREATED and PROCESSING rows remain, the orphan COMPLETED row is deleted
+            assertThat(historyRepository.countRows(orderId)).isEqualTo(2)
+            assertThat(historyRepository.findByOrderId(orderId).single().version).isGreaterThan(processingVersion)
+        }
+
+        assertThat(getOrderHistory(orderId, createdTime.minusMillis(1))).isEmpty()
+        assertThat(getSnapshot(orderId, createdTime).status).isEqualTo(OrderStatus.CREATED)
+        assertThat(getSnapshot(orderId, processingTime).status).isEqualTo(OrderStatus.PROCESSING)
+        // The snapshot between the corruption and the repair already returns the repaired state
+        val repairedSnapshot = getSnapshot(orderId, corruptedTime)
+        assertThat(repairedSnapshot.status).isEqualTo(OrderStatus.PROCESSING)
+        assertThat(repairedSnapshot.updatedAt).isEqualTo(processingTime)
+
+        // Background merges keep both repaired states
+        historyRepository.optimizeFinal()
+        assertThat(historyRepository.countRows(orderId)).isEqualTo(2)
+        assertThat(getSnapshot(orderId, createdTime).status).isEqualTo(OrderStatus.CREATED)
     }
 
     private fun createOrder(
@@ -121,6 +156,12 @@ class OrderHistoryTimeTravelIT : IntegrationTestContainers() {
                 contentType = MediaType.APPLICATION_JSON
                 content = objectMapper.writeValueAsString(UpdateOrderTotalAmountRequest(orderId, customerId, totalAmount))
             }.andExpect { status { isOk() } }
+    }
+
+    private fun repairHistory(orderId: UUID) {
+        mockMvc
+            .post("/orders/$orderId/history/repair")
+            .andExpect { status { isAccepted() } }
     }
 
     // Without targetTime the endpoint uses its default (now)

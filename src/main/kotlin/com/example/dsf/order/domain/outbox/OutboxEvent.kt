@@ -1,5 +1,6 @@
 package com.example.dsf.order.domain.outbox
 
+import com.example.dsf.commons.nowInMillis
 import org.springframework.data.annotation.Id
 import org.springframework.data.domain.Persistable
 import org.springframework.data.relational.core.mapping.Column
@@ -21,7 +22,7 @@ data class OutboxEvent(
     val payload: String,
     // Name of the kafka topic to which the event is sent
     val targetTopic: String,
-    val createdAt: Instant = Instant.now(),
+    val createdAt: Instant = nowInMillis(),
 ) : Persistable<UUID> {
     override fun getId(): UUID = id
 

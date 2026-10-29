@@ -18,6 +18,18 @@ class ClickhouseOrderHistoryTestRepository(
     fun findByOrderId(orderId: UUID): List<OrderHistory> =
         findLatestStates(whereClause = "WHERE order_id = ?") { stmt -> stmt.setObject(1, orderId) }
 
+    // Counts the stored versions of the order (no aggregation); rows marked by a lightweight delete are excluded
+    fun countRows(orderId: UUID): Long =
+        datasource.connection.use { connection ->
+            connection.prepareStatement("SELECT count() FROM order_history WHERE order_id = ?").use { stmt ->
+                stmt.setObject(1, orderId)
+                stmt.executeQuery().use { resultSet ->
+                    resultSet.next()
+                    resultSet.getLong(1)
+                }
+            }
+        }
+
     /** Forces ClickHouse to merge all parts immediately, as a background merge would do eventually. */
     fun optimizeFinal() {
         datasource.connection.use { connection ->
@@ -33,11 +45,11 @@ class ClickhouseOrderHistoryTestRepository(
             """
             SELECT
                 order_id,
-                argMax(customer_id, version) AS latest_customer_id,
-                argMax(total_amount, version) AS latest_total_amount,
-                argMax(status, version) AS latest_status,
+                argMax(customer_id, (version, updated_at)) AS latest_customer_id,
+                argMax(total_amount, (version, updated_at)) AS latest_total_amount,
+                argMax(status, (version, updated_at)) AS latest_status,
                 any(created_at) AS latest_created_at,
-                max(updated_at) AS latest_updated_at,
+                argMax(updated_at, (version, updated_at)) AS latest_updated_at,
                 max(version) AS latest_version
             FROM order_history
             $whereClause

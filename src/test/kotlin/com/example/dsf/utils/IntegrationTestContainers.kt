@@ -26,7 +26,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 // Every IT uses the same configuration, so they all share one cached Spring context and one Kafka consumer
 @SpringBootTest
 @AutoConfigureMockMvc
-@TestPropertySource(properties = ["spring.kafka.consumer.group-id=order-history-it"])
+// Demo data is enabled for all ITs, so the shared context stays one; tests only assert on their own random IDs
+@TestPropertySource(properties = ["spring.kafka.consumer.group-id=order-history-it", "app.demo-data.enabled=true"])
 abstract class IntegrationTestContainers {
     @Autowired
     protected lateinit var mockMvc: MockMvc

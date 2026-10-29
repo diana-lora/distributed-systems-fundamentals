@@ -10,6 +10,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Repository
 import java.math.BigDecimal
+import java.sql.PreparedStatement
 import java.sql.ResultSet
 import java.time.Instant
 import java.time.LocalDateTime
@@ -23,22 +24,9 @@ open class ClickhouseOrderHistoryRepository(
     protected val log = KotlinLogging.logger {}
 
     override fun save(history: OrderHistory): OrderHistory {
-        val sql =
-            """
-            INSERT INTO order_history (order_id, customer_id, total_amount, status, created_at, updated_at, version)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """.trimIndent()
-
         datasource.connection.use { connection ->
-            connection.prepareStatement(sql).use { stmt ->
-                stmt.setObject(1, history.orderId)
-                stmt.setString(2, history.customerId)
-                stmt.setBigDecimal(3, history.totalAmount)
-                stmt.setString(4, history.orderStatus.name)
-                // Instants are bound directly: the driver converts a LocalDateTime from the JVM time zone
-                stmt.setObject(5, history.createdAt)
-                stmt.setObject(6, history.updatedAt)
-                stmt.setLong(7, history.version)
+            connection.prepareStatement(INSERT_SQL).use { stmt ->
+                stmt.setOrderHistory(history)
                 stmt.executeUpdate()
             }
         }
@@ -46,6 +34,59 @@ open class ClickhouseOrderHistoryRepository(
             "Successfully appended domain record to ClickHouse for Order ID: ${history.orderId} with version offset: ${history.version}"
         }
         return history
+    }
+
+    override fun saveAll(histories: List<OrderHistory>) {
+        datasource.connection.use { connection ->
+            connection.prepareStatement(INSERT_SQL).use { stmt ->
+                histories.forEach { history ->
+                    stmt.setOrderHistory(history)
+                    stmt.addBatch()
+                }
+                // The driver sends the whole batch as one INSERT, which ClickHouse writes as a single block
+                stmt.executeBatch()
+            }
+        }
+        log.info { "Successfully appended ${histories.size} domain records to ClickHouse in one batch" }
+    }
+
+    /**
+     * Removes every version of an order older than [version] (lightweight delete), after a history repair.
+     *
+     * **Why the delete runs after the repair insert:** the repaired rows already win every `argMax` because of
+     * their higher version, so readers never see the order without rows. Redelivering the repair is idempotent:
+     * the inserted rows deduplicate (same sorting key and version) and the second delete matches nothing.
+     *
+     * **Why there is no `customer_id` or partition filter:** the delete must also remove orphan rows, i.e. rows
+     * without a repaired counterpart, which may hold a wrong `customer_id` or a wrong `created_at` and therefore
+     * live in another partition. The lightweight delete only marks the matching rows as deleted; background merges
+     * remove them physically.
+     */
+    override fun deleteVersionsBefore(
+        orderId: UUID,
+        version: Long,
+    ) {
+        val sql = "DELETE FROM order_history WHERE order_id = ? AND version < ?"
+
+        datasource.connection.use { connection ->
+            connection.prepareStatement(sql).use { stmt ->
+                stmt.setObject(1, orderId)
+                stmt.setLong(2, version)
+                stmt.executeUpdate()
+            }
+        }
+        log.info { "Successfully deleted versions older than $version in ClickHouse for Order ID: $orderId" }
+    }
+
+    private fun PreparedStatement.setOrderHistory(history: OrderHistory) {
+        setObject(1, history.orderId)
+        setString(2, history.customerId)
+        setBigDecimal(3, history.totalAmount)
+        setString(4, history.orderStatus.name)
+        // Instants are bound directly: the driver converts a LocalDateTime from the JVM time zone
+        setObject(5, history.createdAt)
+        setObject(6, history.updatedAt)
+        setLong(7, history.version)
     }
 
     /**
@@ -95,9 +136,10 @@ open class ClickhouseOrderHistoryRepository(
      *
      * **How the latest version is calculated:** each status change is appended as a new row, so one order owns
      * several rows that differ only by `version` (the Kafka offset of the event). Instead of the expensive `FINAL`
-     * modifier, the rows are collapsed in memory with `GROUP BY order_id`: `argMax(column, version)` returns the
-     * value of the row with the highest version, i.e. the most recent state. `created_at` is the same on every row
-     * of an order, so `any(created_at)` is enough, while `max(updated_at)` returns the time of the latest change.
+     * modifier, the rows are collapsed in memory with `GROUP BY order_id`: `argMax(column, (version, updated_at))`
+     * returns the value of the row with the highest version, i.e. the most recent state. A history repair stores
+     * the whole timeline with one shared version, so `updated_at` breaks the tie and the latest repaired step wins.
+     * `created_at` is the same on every row of an order, so `any(created_at)` is enough.
      *
      * **How the search is restricted to partitions:** the table is partitioned by `toYYYYMM(created_at)`. An order
      * created after [targetTime] cannot be part of the snapshot, so the `created_at <= ?` filter lets ClickHouse
@@ -112,11 +154,11 @@ open class ClickhouseOrderHistoryRepository(
             """
             SELECT
                 order_id,
-                argMax(customer_id, version) AS latest_customer_id,
-                argMax(total_amount, version) AS latest_total_amount,
-                argMax(status, version) AS latest_status,
+                argMax(customer_id, (version, updated_at)) AS latest_customer_id,
+                argMax(total_amount, (version, updated_at)) AS latest_total_amount,
+                argMax(status, (version, updated_at)) AS latest_status,
                 any(created_at) AS latest_created_at,
-                max(updated_at) AS latest_updated_at,
+                argMax(updated_at, (version, updated_at)) AS latest_updated_at,
                 max(version) AS latest_version
             FROM order_history
             WHERE created_at <= ? AND updated_at <= ?
@@ -160,4 +202,12 @@ open class ClickhouseOrderHistoryRepository(
             updatedAt = getObject("latest_updated_at", LocalDateTime::class.java).toUtcInstant(),
             version = getLong("latest_version"),
         )
+
+    private companion object {
+        val INSERT_SQL =
+            """
+            INSERT INTO order_history (order_id, customer_id, total_amount, status, created_at, updated_at, version)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """.trimIndent()
+    }
 }

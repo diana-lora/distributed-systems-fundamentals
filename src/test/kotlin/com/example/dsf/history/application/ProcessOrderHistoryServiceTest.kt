@@ -1,6 +1,8 @@
 package com.example.dsf.history.application
 
 import com.example.dsf.commons.OrderCreatedEvent
+import com.example.dsf.commons.OrderRepairEvent
+import com.example.dsf.commons.OrderRepairStep
 import com.example.dsf.commons.OrderStatus
 import com.example.dsf.commons.OrderStatusUpdatedEvent
 import com.example.dsf.commons.OrderTotalAmountUpdateEvent
@@ -12,6 +14,7 @@ import io.mockk.mockk
 import io.mockk.runs
 import io.mockk.slot
 import io.mockk.verify
+import io.mockk.verifyOrder
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
@@ -53,6 +56,35 @@ class ProcessOrderHistoryServiceTest {
         assertThat(savedHistory.captured).isEqualTo(
             OrderHistory(orderId, "customer-1", BigDecimal("49.90"), OrderStatus.PROCESSING, createdAt, updatedAt, version = 102),
         )
+    }
+
+    @Test
+    fun `should insert the repaired timeline with the Kafka offset and then delete the older versions`() {
+        every { orderHistoryRepository.saveAll(any()) } just runs
+        every { orderHistoryRepository.deleteVersionsBefore(any(), any()) } just runs
+        val processingAt = Instant.parse("2026-01-15T10:05:00Z")
+
+        service.repairOrderHistory(
+            OrderRepairEvent(
+                orderId.toString(),
+                "customer-1",
+                BigDecimal("9.90"),
+                createdAt,
+                listOf(OrderRepairStep(OrderStatus.CREATED, createdAt), OrderRepairStep(OrderStatus.PROCESSING, processingAt)),
+            ),
+            version = 110,
+        )
+
+        // Insert first, so the order never disappears between the two statements
+        verifyOrder {
+            orderHistoryRepository.saveAll(
+                listOf(
+                    OrderHistory(orderId, "customer-1", BigDecimal("9.90"), OrderStatus.CREATED, createdAt, createdAt, version = 110),
+                    OrderHistory(orderId, "customer-1", BigDecimal("9.90"), OrderStatus.PROCESSING, createdAt, processingAt, version = 110),
+                ),
+            )
+            orderHistoryRepository.deleteVersionsBefore(orderId, 110)
+        }
     }
 
     @Test

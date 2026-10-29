@@ -96,9 +96,11 @@ services:
     container_name: outbox-spring-app
     ports:
       - "8080:8080"
-    # Ensure application waits until both DB and Message Broker are fully healthy
+    # Ensure application waits until the databases and the Message Broker are fully healthy
     depends_on:
       postgres:
+        condition: service_healthy
+      clickhouse:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -106,8 +108,10 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/outbox_db
       SPRING_DATASOURCE_USERNAME: outbox_user
       SPRING_DATASOURCE_PASSWORD: outbox_password
+      CLICKHOUSE_DATASOURCE_URL: jdbc:clickhouse://clickhouse:8123/orders_analytics
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      SPRING_FLYWAY_ENABLED: "true"
+      # Inserts the demo orders of docs/runbook/clickhouse-order-history-scenarios.md on the first start
+      APP_DEMO_DATA_ENABLED: "true"
 
   debezium:
     build:

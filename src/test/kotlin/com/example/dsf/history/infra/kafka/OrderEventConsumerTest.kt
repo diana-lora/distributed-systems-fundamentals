@@ -2,6 +2,8 @@ package com.example.dsf.history.infra.kafka
 
 import com.example.dsf.commons.OrderCreatedEvent
 import com.example.dsf.commons.OrderEvent
+import com.example.dsf.commons.OrderRepairEvent
+import com.example.dsf.commons.OrderRepairStep
 import com.example.dsf.commons.OrderStatus
 import com.example.dsf.commons.OrderStatusUpdatedEvent
 import com.example.dsf.commons.OrderTotalAmountUpdateEvent
@@ -51,6 +53,22 @@ class OrderEventConsumerTest {
         consumer.consumeOrderCreatedEvent(toJson(event), offset = 44)
 
         verify { processOrderHistoryService.correctOrderTotalAmount(event) }
+    }
+
+    @Test
+    fun `should repair the order history with the offset as version`() {
+        val event =
+            OrderRepairEvent(
+                "order-1",
+                "customer-1",
+                BigDecimal("49.90"),
+                createdAt,
+                listOf(OrderRepairStep(OrderStatus.CREATED, createdAt)),
+            )
+
+        consumer.consumeOrderCreatedEvent(toJson(event), offset = 47)
+
+        verify { processOrderHistoryService.repairOrderHistory(event, 47) }
     }
 
     @Test

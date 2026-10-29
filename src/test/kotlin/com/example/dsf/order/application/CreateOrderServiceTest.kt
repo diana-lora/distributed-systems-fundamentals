@@ -9,6 +9,8 @@ import com.example.dsf.config.KafkaConfig.Companion.ORDER_EVENTS_TOPIC
 import com.example.dsf.order.application.commands.PlaceOrderCommand
 import com.example.dsf.order.domain.Order
 import com.example.dsf.order.domain.OrderRepository
+import com.example.dsf.order.domain.OrderStatusChange
+import com.example.dsf.order.domain.OrderStatusChangeRepository
 import com.example.dsf.order.domain.outbox.OutboxEvent
 import com.example.dsf.order.domain.outbox.OutboxRepository
 import io.mockk.every
@@ -20,13 +22,17 @@ import java.math.BigDecimal
 
 class CreateOrderServiceTest {
     private val orderRepository = mockk<OrderRepository>()
+    private val orderStatusChangeRepository = mockk<OrderStatusChangeRepository>()
     private val outboxRepository = mockk<OutboxRepository>()
     private val objectMapper = KafkaConfig("unused").customObjectMapper()
-    private val service = CreateOrderService(orderRepository, outboxRepository, objectMapper)
+    private val service =
+        CreateOrderService(orderRepository, orderStatusChangeRepository, OutboxEventService(outboxRepository, objectMapper))
 
     @Test
-    fun `should save the order and an ORDER_CREATED outbox event`() {
+    fun `should save the order, its CREATED status change and an ORDER_CREATED outbox event`() {
         every { orderRepository.save(any()) } answers { firstArg() }
+        val statusChange = slot<OrderStatusChange>()
+        every { orderStatusChangeRepository.save(capture(statusChange)) } answers { firstArg() }
         val outboxEvent = slot<OutboxEvent>()
         every { outboxRepository.save(capture(outboxEvent)) } answers { firstArg() }
 
@@ -35,6 +41,14 @@ class CreateOrderServiceTest {
         assertThat(order.customerId).isEqualTo("customer-1")
         assertThat(order.totalAmount).isEqualByComparingTo("49.90")
         assertThat(order.status).isEqualTo(OrderStatus.CREATED)
+        // Millisecond precision, so PostgreSQL and ClickHouse DateTime64(3) store the same value
+        assertThat(order.createdAt.nano % 1_000_000).isZero()
+
+        with(statusChange.captured) {
+            assertThat(orderId).isEqualTo(order.id)
+            assertThat(status).isEqualTo(OrderStatus.CREATED)
+            assertThat(createdAt).isEqualTo(order.createdAt)
+        }
 
         with(outboxEvent.captured) {
             assertThat(eventType).isEqualTo(ORDER_CREATED)

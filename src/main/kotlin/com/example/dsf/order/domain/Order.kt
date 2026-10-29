@@ -1,6 +1,7 @@
 package com.example.dsf.order.domain
 
 import com.example.dsf.commons.OrderStatus
+import com.example.dsf.commons.nowInMillis
 import org.springframework.data.annotation.Id
 import org.springframework.data.annotation.Version
 import org.springframework.data.relational.core.mapping.Table
@@ -15,7 +16,7 @@ class Order(
     val customerId: String,
     var totalAmount: BigDecimal,
     var status: OrderStatus = OrderStatus.CREATED,
-    val createdAt: Instant = Instant.now(),
+    val createdAt: Instant = nowInMillis(),
     // Null for new orders: Spring Data JDBC INSERTs, otherwise UPDATEs with optimistic locking
     @Version
     var version: Long? = null,

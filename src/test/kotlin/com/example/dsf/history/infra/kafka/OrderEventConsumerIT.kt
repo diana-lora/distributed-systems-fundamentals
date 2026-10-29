@@ -2,6 +2,8 @@ package com.example.dsf.history.infra.kafka
 
 import com.example.dsf.commons.OrderCreatedEvent
 import com.example.dsf.commons.OrderEvent
+import com.example.dsf.commons.OrderRepairEvent
+import com.example.dsf.commons.OrderRepairStep
 import com.example.dsf.commons.OrderStatus
 import com.example.dsf.commons.OrderStatusUpdatedEvent
 import com.example.dsf.commons.OrderTotalAmountUpdateEvent
@@ -106,6 +108,46 @@ class OrderEventConsumerIT : IntegrationTestContainers() {
     }
 
     @Test
+    fun `should replace every version with the ORDER_REPAIR timeline and delete the older ones`() {
+        publish(created)
+        publish(processing)
+        val processingVersion = awaitLatestState { assertThat(it.orderStatus).isEqualTo(OrderStatus.PROCESSING) }.version
+        // Orphan: a state that never happened, at a timestamp no repaired row shares
+        val orphanAt = Instant.parse("2026-01-15T10:07:00Z")
+        historyRepository.save(
+            OrderHistory(orderId, customerId, BigDecimal("99.00"), OrderStatus.COMPLETED, createdAt, orphanAt, processingVersion),
+        )
+
+        val repair =
+            OrderRepairEvent(
+                orderId.toString(),
+                customerId,
+                BigDecimal("9.90"),
+                createdAt,
+                listOf(OrderRepairStep(OrderStatus.CREATED, createdAt), OrderRepairStep(OrderStatus.PROCESSING, processingAt)),
+            )
+        publish(repair)
+
+        val repaired = awaitRepair(previousVersion = processingVersion)
+        assertThat(repaired.orderStatus).isEqualTo(OrderStatus.PROCESSING)
+        assertThat(repaired.totalAmount).isEqualByComparingTo("9.90")
+        assertThat(repaired.updatedAt).isEqualTo(processingAt)
+
+        // Both repaired rows share one version, so updated_at decides which one each snapshot returns
+        assertThat(findSnapshot(beforeProcessing).orderStatus).isEqualTo(OrderStatus.CREATED)
+        assertThat(findSnapshot(orphanAt).orderStatus).isEqualTo(OrderStatus.PROCESSING)
+
+        // A second repair replaces the first one and leaves the same timeline
+        publish(repair)
+        val repairedAgain = awaitRepair(previousVersion = repaired.version)
+        assertThat(repairedAgain.orderStatus).isEqualTo(OrderStatus.PROCESSING)
+        assertThat(findSnapshot(beforeProcessing).orderStatus).isEqualTo(OrderStatus.CREATED)
+
+        historyRepository.optimizeFinal()
+        assertThat(historyRepository.countRows(orderId)).isEqualTo(2)
+    }
+
+    @Test
     fun `should route a poison pill payload to the DLT topic`() {
         val poisonPayload = "invalid-non-json-byte-payload".toByteArray(Charsets.UTF_8)
         val testKey = "poison-key-${UUID.randomUUID()}"
@@ -167,6 +209,17 @@ class OrderEventConsumerIT : IntegrationTestContainers() {
             assertThat(records).hasSize(1)
             latest = records.first()
             assertion(latest)
+        }
+        return latest
+    }
+
+    // Waits until the repair rows are stored and every older version (orphans included) is deleted
+    private fun awaitRepair(previousVersion: Long): OrderHistory {
+        lateinit var latest: OrderHistory
+        await.atMost(Duration.ofSeconds(15)).pollInterval(Duration.ofMillis(250)).untilAsserted {
+            latest = historyRepository.findByOrderId(orderId).single()
+            assertThat(latest.version).isGreaterThan(previousVersion)
+            assertThat(historyRepository.countRows(orderId)).isEqualTo(2)
         }
         return latest
     }

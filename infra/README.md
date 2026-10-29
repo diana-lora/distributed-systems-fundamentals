@@ -20,6 +20,11 @@ Run the following command in your terminal to build the local images and spin up
 docker compose up --build -d
 ```
 
+On the first start, the application inserts demo orders into PostgreSQL (`APP_DEMO_DATA_ENABLED`), which flow through
+Debezium and Kafka into the ClickHouse order history. The
+[order history scenarios runbook](../docs/runbook/clickhouse-order-history-scenarios.md) uses them. Run
+`docker compose down -v` to start again from a clean database.
+
 ### 3. Service Access Ports
 
 Once the ecosystem is fully initialized, you can verify the status of the components through the following local

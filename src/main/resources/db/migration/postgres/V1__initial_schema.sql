@@ -23,3 +23,14 @@ CREATE TABLE outbox
 );
 
 CREATE INDEX idx_outbox_created_at ON outbox (created_at);
+
+-- 3. Status Timeline of each order, source of truth for order history repairs
+CREATE TABLE order_status_changes
+(
+    id         UUID PRIMARY KEY,
+    order_id   UUID                     NOT NULL REFERENCES orders (id),
+    status     VARCHAR(50)              NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE INDEX idx_order_status_changes_order_id ON order_status_changes (order_id, created_at);

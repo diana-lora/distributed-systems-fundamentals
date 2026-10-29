@@ -1,6 +1,7 @@
 package com.example.dsf.commons
 
 import com.example.dsf.commons.OrderEventType.ORDER_CREATED
+import com.example.dsf.commons.OrderEventType.ORDER_REPAIR
 import com.example.dsf.commons.OrderEventType.ORDER_STATUS_UPDATED
 import com.example.dsf.commons.OrderEventType.ORDER_TOTAL_AMOUNT_UPDATED
 import com.example.dsf.config.KafkaConfig
@@ -22,6 +23,14 @@ class OrderEventsTest {
                 OrderStatusUpdatedEvent("order-1", "customer-1", BigDecimal("49.90"), OrderStatus.PROCESSING, createdAt, updatedAt),
             ORDER_TOTAL_AMOUNT_UPDATED to
                 OrderTotalAmountUpdateEvent("order-1", "customer-1", BigDecimal("9.90"), createdAt),
+            ORDER_REPAIR to
+                OrderRepairEvent(
+                    "order-1",
+                    "customer-1",
+                    BigDecimal("9.90"),
+                    createdAt,
+                    listOf(OrderRepairStep(OrderStatus.CREATED, createdAt), OrderRepairStep(OrderStatus.PROCESSING, updatedAt)),
+                ),
         )
 
     @Test

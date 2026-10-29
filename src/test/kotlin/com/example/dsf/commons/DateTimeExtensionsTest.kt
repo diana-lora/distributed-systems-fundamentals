@@ -28,6 +28,18 @@ class DateTimeExtensionsTest {
     }
 
     @Test
+    fun `should truncate an instant to milliseconds`() {
+        val instant = Instant.parse("2026-10-26T08:59:20.026639123Z")
+
+        assertThat(instant.truncatedToMillis()).isEqualTo(Instant.parse("2026-10-26T08:59:20.026Z"))
+    }
+
+    @Test
+    fun `should return the current instant with millisecond precision`() {
+        assertThat(nowInMillis().nano % 1_000_000).isZero()
+    }
+
+    @Test
     fun `should ignore daylight saving time changes of the default time zone`() {
         // 01:30 UTC falls into the hour that is skipped in Central Europe when summer time starts
         val instant = Instant.parse("2026-03-29T01:30:00Z")

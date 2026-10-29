@@ -5,6 +5,6 @@ import com.example.dsf.order.domain.outbox.OutboxRepository
 import org.springframework.data.repository.CrudRepository
 import java.util.UUID
 
-interface SpringDataOutboxRepository :
+interface PostgresOutboxRepository :
     CrudRepository<OutboxEvent, UUID>,
     OutboxRepository

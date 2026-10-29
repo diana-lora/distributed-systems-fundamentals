@@ -1,6 +1,7 @@
 package com.example.dsf.history.application
 
 import com.example.dsf.commons.OrderCreatedEvent
+import com.example.dsf.commons.OrderRepairEvent
 import com.example.dsf.commons.OrderStatusUpdatedEvent
 import com.example.dsf.commons.OrderTotalAmountUpdateEvent
 import com.example.dsf.history.domain.OrderHistory
@@ -47,6 +48,29 @@ class ProcessOrderHistoryService(
             )
 
         orderHistoryRepository.save(history)
+    }
+
+    fun repairOrderHistory(
+        event: OrderRepairEvent,
+        version: Long,
+    ) {
+        val orderId = UUID.fromString(event.orderId)
+        // Every step shares the offset of the repair event; findBy breaks the tie by updatedAt
+        val histories =
+            event.steps.map { step ->
+                OrderHistory(
+                    orderId = orderId,
+                    customerId = event.customerId,
+                    totalAmount = event.totalAmount,
+                    orderStatus = step.status,
+                    createdAt = event.createdAt,
+                    updatedAt = step.updatedAt,
+                    version = version,
+                )
+            }
+
+        orderHistoryRepository.saveAll(histories)
+        orderHistoryRepository.deleteVersionsBefore(orderId = orderId, version = version)
     }
 
     fun correctOrderTotalAmount(event: OrderTotalAmountUpdateEvent) {

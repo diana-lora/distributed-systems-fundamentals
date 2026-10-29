@@ -3,16 +3,19 @@ package com.example.dsf.order.infra.web
 import com.example.dsf.commons.OrderCreatedEvent
 import com.example.dsf.commons.OrderEvent
 import com.example.dsf.commons.OrderEventType.ORDER_CREATED
+import com.example.dsf.commons.OrderEventType.ORDER_REPAIR
 import com.example.dsf.commons.OrderEventType.ORDER_STATUS_UPDATED
 import com.example.dsf.commons.OrderEventType.ORDER_TOTAL_AMOUNT_UPDATED
+import com.example.dsf.commons.OrderRepairEvent
+import com.example.dsf.commons.OrderRepairStep
 import com.example.dsf.commons.OrderStatus
 import com.example.dsf.commons.OrderStatusUpdatedEvent
 import com.example.dsf.commons.OrderTotalAmountUpdateEvent
 import com.example.dsf.config.KafkaConfig.Companion.ORDER_EVENTS_TOPIC
 import com.example.dsf.order.domain.Order
 import com.example.dsf.order.domain.outbox.OutboxEvent
-import com.example.dsf.order.infra.db.SpringDataOrderRepository
-import com.example.dsf.order.infra.db.SpringDataOutboxRepository
+import com.example.dsf.order.infra.db.PostgresOrderRepository
+import com.example.dsf.order.infra.db.PostgresOutboxRepository
 import com.example.dsf.order.infra.web.dtos.CreateOrderRequest
 import com.example.dsf.order.infra.web.dtos.OrderResponse
 import com.example.dsf.order.infra.web.dtos.UpdateOrderStatusRequest
@@ -32,10 +35,10 @@ import java.util.UUID
 /** Order endpoints in, `orders` and `outbox` tables out. The history side is covered by the history tests (OrderEventConsumerIT). */
 class OrderControllerIT : IntegrationTestContainers() {
     @Autowired
-    private lateinit var orderRepository: SpringDataOrderRepository
+    private lateinit var orderRepository: PostgresOrderRepository
 
     @Autowired
-    private lateinit var outboxRepository: SpringDataOutboxRepository
+    private lateinit var outboxRepository: PostgresOutboxRepository
 
     private val customerId = "customer-order-${UUID.randomUUID()}"
 
@@ -101,6 +104,34 @@ class OrderControllerIT : IntegrationTestContainers() {
         assertThat(event.customerId).isEqualTo(customerId)
         assertThat(event.newTotalAmount).isEqualByComparingTo("9.90")
         assertThat(event.createdAt).isEqualTo(order.createdAt)
+    }
+
+    @Test
+    fun `should add an ORDER_REPAIR outbox event with the whole status timeline`() {
+        val orderId = createOrder(BigDecimal("49.90")).id
+        updateOrderStatus(orderId, OrderStatus.PROCESSING)
+        updateOrderStatus(orderId, OrderStatus.COMPLETED)
+
+        mockMvc
+            .post("/orders/$orderId/history/repair")
+            .andExpect { status { isAccepted() } }
+
+        val outboxEvents = findOutboxEvents(orderId)
+        val statusEvents =
+            outboxEvents
+                .filter { it.eventType == ORDER_STATUS_UPDATED }
+                .map { readEvent<OrderStatusUpdatedEvent>(it) }
+                .sortedBy { it.updatedAt }
+        val repair = readEvent<OrderRepairEvent>(outboxEvents.single { it.eventType == ORDER_REPAIR })
+        assertThat(repair.customerId).isEqualTo(customerId)
+        assertThat(repair.totalAmount).isEqualByComparingTo("49.90")
+        assertThat(repair.createdAt).isEqualTo(findOrder(orderId).createdAt)
+        // Every step holds exactly the updatedAt of the event it repairs
+        assertThat(repair.steps).containsExactly(
+            OrderRepairStep(OrderStatus.CREATED, repair.createdAt),
+            OrderRepairStep(OrderStatus.PROCESSING, statusEvents[0].updatedAt),
+            OrderRepairStep(OrderStatus.COMPLETED, statusEvents[1].updatedAt),
+        )
     }
 
     @Test
