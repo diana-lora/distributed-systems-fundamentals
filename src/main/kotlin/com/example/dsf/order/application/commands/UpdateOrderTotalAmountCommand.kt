@@ -5,6 +5,5 @@ import java.util.UUID
 
 class UpdateOrderTotalAmountCommand(
     val orderId: UUID,
-    val customerId: String,
     val newTotalAmount: BigDecimal,
 )

@@ -35,7 +35,5 @@ data class UpdateOrderStatusRequest(
 )
 
 data class UpdateOrderTotalAmountRequest(
-    val orderId: UUID,
-    val customerId: String,
     val totalAmount: BigDecimal,
 )

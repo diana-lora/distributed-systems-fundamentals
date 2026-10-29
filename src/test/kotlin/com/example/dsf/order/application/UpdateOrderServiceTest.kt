@@ -82,7 +82,7 @@ class UpdateOrderServiceTest {
     fun `should update the total amount and save an ORDER_TOTAL_AMOUNT_UPDATED outbox event`() {
         givenExistingOrder()
 
-        val updated = service.execute(UpdateOrderTotalAmountCommand(order.id, "customer-1", BigDecimal("9.90")))
+        val updated = service.execute(UpdateOrderTotalAmountCommand(order.id, BigDecimal("9.90")))
 
         assertThat(updated.totalAmount).isEqualByComparingTo("9.90")
         assertThat(updated.status).isEqualTo(OrderStatus.CREATED)
@@ -110,7 +110,7 @@ class UpdateOrderServiceTest {
             service.execute(UpdateOrderStatusCommand(unknownOrderId, OrderStatus.PROCESSING))
         }
         assertThrows<OrderNotFoundException> {
-            service.execute(UpdateOrderTotalAmountCommand(unknownOrderId, "customer-1", BigDecimal("9.90")))
+            service.execute(UpdateOrderTotalAmountCommand(unknownOrderId, BigDecimal("9.90")))
         }
 
         verify(exactly = 0) { orderRepository.save(any()) }

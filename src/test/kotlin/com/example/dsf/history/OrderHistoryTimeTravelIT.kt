@@ -66,7 +66,7 @@ class OrderHistoryTimeTravelIT : IntegrationTestContainers() {
         assertThat(getSnapshot(orderId, createdTime).totalAmount).isEqualByComparingTo(wrongAmount)
         assertThat(getSnapshot(orderId, processingTime).totalAmount).isEqualByComparingTo(wrongAmount)
 
-        updateTotalAmount(orderId, customerId, correctAmount)
+        updateTotalAmount(orderId, correctAmount)
         awaitLatestState(orderId) { assertThat(it.totalAmount).isEqualByComparingTo(correctAmount) }
 
         val createdSnapshot = getSnapshot(orderId, createdTime)
@@ -147,13 +147,12 @@ class OrderHistoryTimeTravelIT : IntegrationTestContainers() {
 
     private fun updateTotalAmount(
         orderId: UUID,
-        customerId: String,
         totalAmount: BigDecimal,
     ) {
         mockMvc
-            .put("/orders/totalAmount") {
+            .put("/orders/$orderId/totalAmount") {
                 contentType = MediaType.APPLICATION_JSON
-                content = objectMapper.writeValueAsString(UpdateOrderTotalAmountRequest(orderId, customerId, totalAmount))
+                content = objectMapper.writeValueAsString(UpdateOrderTotalAmountRequest(totalAmount))
             }.andExpect { status { isOk() } }
     }
 

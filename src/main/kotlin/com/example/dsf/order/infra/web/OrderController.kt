@@ -63,14 +63,14 @@ class OrderController(
         updateOrderService.execute(command)
     }
 
-    @PutMapping("/totalAmount")
+    @PutMapping("/{orderId}/totalAmount")
     fun updateOrderTotalAmount(
+        @PathVariable orderId: UUID,
         @RequestBody request: UpdateOrderTotalAmountRequest,
     ) {
         val command =
             UpdateOrderTotalAmountCommand(
-                orderId = request.orderId,
-                customerId = request.customerId,
+                orderId = orderId,
                 newTotalAmount = request.totalAmount,
             )
 

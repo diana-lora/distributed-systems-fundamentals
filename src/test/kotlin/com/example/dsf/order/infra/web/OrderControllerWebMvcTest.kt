@@ -85,9 +85,9 @@ class OrderControllerWebMvcTest {
             OrderNotFoundException("Order not found (ID=$unknownOrderId)")
 
         mockMvc
-            .put("/orders/totalAmount") {
+            .put("/orders/$unknownOrderId/totalAmount") {
                 contentType = MediaType.APPLICATION_JSON
-                content = """{"orderId": "$unknownOrderId", "customerId": "customer-1", "totalAmount": 9.90}"""
+                content = """{"totalAmount": 9.90}"""
             }.andExpect {
                 status { isNotFound() }
                 jsonPath("$.detail") { value("Order not found (ID=$unknownOrderId)") }

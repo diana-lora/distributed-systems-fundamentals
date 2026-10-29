@@ -181,9 +181,9 @@ class OrderControllerIT : IntegrationTestContainers() {
         newTotalAmount: BigDecimal,
     ) {
         mockMvc
-            .put("/orders/totalAmount") {
+            .put("/orders/$orderId/totalAmount") {
                 contentType = MediaType.APPLICATION_JSON
-                content = objectMapper.writeValueAsString(UpdateOrderTotalAmountRequest(orderId, customerId, newTotalAmount))
+                content = objectMapper.writeValueAsString(UpdateOrderTotalAmountRequest(newTotalAmount))
             }.andExpect { status { isOk() } }
     }
 
