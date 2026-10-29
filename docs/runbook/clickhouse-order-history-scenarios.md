@@ -83,7 +83,7 @@ explains why the results look the way they do.
    ```
 3. Correct the total amount to `9.90`:
    ```bash
-   curl -s -X PUT http://localhost:8080/orders/<order-id>/totalAmount -H 'Content-Type: application/json' \
+   curl -s -X PUT http://localhost:8080/orders/<order-id>/total-amount -H 'Content-Type: application/json' \
      -d '{"totalAmount": 9.90}'
    ```
 4. Run the [pipeline checks](#pipeline-checks) for `<order-id>`:
@@ -105,13 +105,13 @@ explains why the results look the way they do.
 1. Run steps 1 and 2 of [Scenario 2](#scenario-2-order-status-update) to create an order and move it to `PROCESSING`.
 2. Read the current state of the order:
    ```bash
-   curl -s "http://localhost:8080/ordersHistory?orderId=<order-id>"
+   curl -s "http://localhost:8080/orders-history?orderId=<order-id>"
    ```
-   You should see one entry with status `PROCESSING`; the target time defaults to now. Note its `createdAt` (when the
+You should see one entry with status `PROCESSING`; the target time defaults to now. Note its `createdAt` (when the
    order was created) and `updatedAt` (when it moved to `PROCESSING`).
 3. Read the order at specific points in time, using those values as `targetTime`:
    ```bash
-   curl -s "http://localhost:8080/ordersHistory?orderId=<order-id>&targetTime=<target-time>"
+   curl -s "http://localhost:8080/orders-history?orderId=<order-id>&targetTime=<target-time>"
    ```
    * Shortly before `createdAt`: you should see `[]`, because the order did not exist yet.
    * At `createdAt`: you should see one entry with status `CREATED`.
@@ -121,39 +121,34 @@ explains why the results look the way they do.
 
 **Goal:** Repair an order whose history no longer matches PostgreSQL, including rows that never happened.
 
-1. Simulate drift in ClickHouse: store a `COMPLETED` state at `09:06` that never happened in PostgreSQL. It copies the
-   newest version of the order, so it wins every snapshot after `09:06`:
+1. Run steps 1 and 2 of [Scenario 2](#scenario-2-order-status-update) to create an order and move it to `PROCESSING`.
+2. Simulate drift: run the following statement in ClickHouse. It stores a `COMPLETED` state that never happened in
+   PostgreSQL, one second after the newest version:
    ```sql
    INSERT INTO order_history
-   SELECT order_id, customer_id, total_amount, 'COMPLETED', created_at, updated_at + INTERVAL 1 MINUTE, version
-   FROM order_history
-   WHERE order_id = '10000000-0000-4000-8000-000000000003'
-   ORDER BY version DESC, updated_at DESC
-   LIMIT 1;
+   SELECT order_id, customer_id, total_amount, 'COMPLETED', created_at, updated_at + INTERVAL 1 SECOND, version
+   FROM order_history WHERE order_id = '<order-id>' ORDER BY version DESC, updated_at DESC LIMIT 1;
    ```
-2. Confirm the discrepancy. Run the stored versions query in ClickHouse for order
-   `10000000-0000-4000-8000-000000000003`, read the `09:10` snapshot, and compare it with the current state in
-   PostgreSQL, which still reports `PROCESSING` for the order:
+3. Confirm the discrepancy. The history reports `COMPLETED`:
    ```bash
-   curl -s "http://localhost:8080/ordersHistory?orderId=10000000-0000-4000-8000-000000000003&targetTime=2026-01-20T09:10:00Z"
-   curl -s http://localhost:8080/orders
+   curl -s "http://localhost:8080/orders-history?orderId=<order-id>"
    ```
-3. Trigger the history rebuild:
+   PostgreSQL still reports `PROCESSING`:
+   ```sql
+   SELECT * FROM orders WHERE id = '<order-id>';
+   ```
+4. Trigger the history rebuild. It returns `202 Accepted`; the rebuild runs once the repair event is consumed:
    ```bash
-   curl -s -i -X POST http://localhost:8080/orders/10000000-0000-4000-8000-000000000003/history/repair
+   curl -s -i -X POST http://localhost:8080/orders/<order-id>/history-repair
    ```
-4. Run the stored versions query again, and read the snapshots after the creation and after the status change:
-   ```bash
-   curl -s "http://localhost:8080/ordersHistory?orderId=10000000-0000-4000-8000-000000000003&targetTime=2026-01-20T09:02:00Z"
-   curl -s "http://localhost:8080/ordersHistory?orderId=10000000-0000-4000-8000-000000000003&targetTime=2026-01-20T09:10:00Z"
-   ```
-
-**Expected result:**
-
-* Step 3 returns `202 Accepted`; the rebuild runs asynchronously once the repair event is consumed.
-* After the rebuild, exactly two rows remain: `CREATED` at `09:00` and `PROCESSING` at `09:05`. Both share one new
-  version, higher than every earlier version. The `COMPLETED` row and the older versions are deleted.
-* The `09:02` snapshot returns `CREATED`, and the `09:10` snapshot returns `PROCESSING` with `updated_at` `09:05`.
+5. Run the [pipeline checks](#pipeline-checks) for `<order-id>`:
+   * Check the `orders` table. You should see the unchanged row with status `PROCESSING` and `version = 1`.
+   * Check the `order_status_changes` table. You should see the unchanged rows `CREATED` and `PROCESSING`.
+   * Check the `outbox` table. You should see an additional `ORDER_REPAIR` row; its payload lists the `CREATED` and
+     `PROCESSING` steps.
+   * Check Kafka UI. You should see a third message, the `ORDER_REPAIR` event, with the highest offset.
+   * Check the `order_history` table. You should see exactly two rows, `CREATED` and `PROCESSING`, both with the offset
+     of the repair event as `version`. The `COMPLETED` row is gone.
 
 **If the rows are not repaired:** Check the application logs (`docker logs outbox-spring-app`) for the repair message
 of the order, and the order events topic in Kafka UI (`http://localhost:8082`) for an `ORDER_REPAIR` message. If the
