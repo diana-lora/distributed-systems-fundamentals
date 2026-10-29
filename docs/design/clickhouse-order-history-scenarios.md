@@ -39,10 +39,31 @@ The query works in three steps:
    order. `updated_at` only breaks ties between rows with the same version, which happens after a history rebuild
    (Scenario 5).
 
+## Scenario 1: Order Creation
+
+An order is created at `17:00`. The creation event is appended as the first row of the order, with
+`updated_at = created_at` and the Kafka offset of the event as `version`.
+
+**Stored rows:**
+
+| Version | `created_at` | `updated_at` | `status`  | `total_amount` | Meaning        |
+|:--------|:-------------|:-------------|:----------|:---------------|:---------------|
+| `v101`  | `17:00`      | `17:00`      | `CREATED` | `99.00`        | Order creation |
+
+**Resolution per snapshot:**
+
+| Snapshot | Step 1: `created_at <= target`        | Step 2: `updated_at <= target` | Step 3: `argMax(..., version)` | Result       |
+|:---------|:--------------------------------------|:-------------------------------|:-------------------------------|:-------------|
+| `16:59`  | No row passes (order not created yet) | –                              | –                              | Order absent |
+| `17:02`  | `v101`                                | `v101`                         | `v101`                         | `CREATED`    |
+
+If Kafka redelivers the creation event, the second row has the same sorting key and the same version as `v101`, so
+the next background merge removes it. Until then, both rows resolve to the same state.
+
 ## Scenario 2: Order Status Update
 
-An order is created at `17:00` and moves to `PROCESSING` at `17:05`. Each event is appended as a new row; nothing is
-updated in place.
+The order from Scenario 1 moves to `PROCESSING` at `17:05`. Each event is appended as a new row; nothing is updated
+in place.
 
 **Stored rows:**
 
@@ -133,6 +154,34 @@ WHERE customer_id = ? AND order_id = ?
 `status`, `updated_at` and `version` stay untouched, so the status timeline from Scenario 2 is preserved. The
 trade-off is that ClickHouse no longer keeps the original wrong value, and corrections must stay low-frequency (see the
 [Negative Impact](../adr/0003-clickhouse-for-order-history.md#negative-impact) of the ADR).
+
+## Scenario 4: Historical Point-in-Time Reconstruction (Time Travel)
+
+A snapshot returns every order as it looked at the target time, one row per order. It uses the time travel query of
+the [Shared Foundation](#shared-foundation-the-three-columns-that-drive-time-travel); the scenarios above show it for a
+single order, this one for several orders at once.
+
+Order `A` is the order from Scenario 2. Order `B` is created at `17:03` and has no further changes.
+
+**Stored rows:**
+
+| Order | Version | `created_at` | `updated_at` | `status`     | Meaning              |
+|:------|:--------|:-------------|:-------------|:-------------|:---------------------|
+| `A`   | `v101`  | `17:00`      | `17:00`      | `CREATED`    | Order `A` creation   |
+| `A`   | `v102`  | `17:00`      | `17:05`      | `PROCESSING` | Order `A` update     |
+| `B`   | `v103`  | `17:03`      | `17:03`      | `CREATED`    | Order `B` creation   |
+
+**Resolution per snapshot:**
+
+| Snapshot | Step 1: `created_at <= target` | Step 2: `updated_at <= target` | Step 3: `argMax(...)` per order | Result                                 |
+|:---------|:-------------------------------|:-------------------------------|:--------------------------------|:---------------------------------------|
+| `17:02`  | `v101`, `v102`                 | `v101`                         | `A`: `v101`                     | `A` `CREATED`; `B` absent              |
+| `17:04`  | `v101`, `v102`, `v103`         | `v101`, `v103`                 | `A`: `v101`; `B`: `v103`        | `A` `CREATED`; `B` `CREATED`           |
+| `17:06`  | `v101`, `v102`, `v103`         | `v101`, `v102`, `v103`         | `A`: `v102`; `B`: `v103`        | `A` `PROCESSING`; `B` `CREATED`        |
+
+`GROUP BY order_id` makes `argMax` choose the newest version **per order**, so the versions of `A` never compete with
+the version of `B`. Each snapshot is computed at query time from the stored rows; nothing is written or precomputed
+for it.
 
 ## Scenario 5: History Rebuild with Backdated Versions
 

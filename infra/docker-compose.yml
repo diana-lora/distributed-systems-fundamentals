@@ -116,9 +116,7 @@ services:
       APP_DEMO_DATA_ENABLED: "true"
 
   debezium:
-    build:
-      context: ./Debezium
-      dockerfile: Dockerfile
+    image: quay.io/debezium/connect:3.7.0.Final
     container_name: outbox-debezium
     ports:
       - "8083:8083"

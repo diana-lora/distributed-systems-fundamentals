@@ -1,4 +1,4 @@
-## 🐳 Deployment Guide via Docker Compose (Container Mode)
+## Deployment Guide via Docker Compose (Container Mode)
 
 This section describes how to spin up the complete ecosystem (Database, Kafka, Debezium, and the Spring Boot
 application) fully automated inside Docker containers. This is the ideal setup for continuous integration (CI)
@@ -37,7 +37,7 @@ addresses:
 
 ---
 
-## 💻 Configuration & Workflow for Local Development with IntelliJ IDEA
+## Configuration & Workflow for Local Development with IntelliJ IDEA
 
 If you want to modify source code, debug features, or run interactive tests in real-time, you should run the Spring Boot
 application natively within **IntelliJ IDEA** and delegate only the heavy infrastructure to Docker Compose.

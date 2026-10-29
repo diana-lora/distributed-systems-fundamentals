@@ -32,12 +32,12 @@ insert the demo orders.
 The application inserts the following orders into PostgreSQL on the first start. Debezium and the consumer copy them into
 ClickHouse, so every history version is a real Kafka offset. All times are UTC.
 
-| Order ID                               | Customer         | Timeline                                                       | Used in        |
-|:---------------------------------------|:-----------------|:---------------------------------------------------------------|:---------------|
-| `10000000-0000-4000-8000-000000000001` | `customer-alice` | `CREATED` 2026-01-15 17:00, `PROCESSING` 17:05, `COMPLETED` 17:10 | Scenario 2, 4 |
-| `10000000-0000-4000-8000-000000000002` | `customer-alice` | `CREATED` 2026-01-15 18:00 (wrong amount `99.00`), `PROCESSING` 18:05 | Scenario 3 |
-| `10000000-0000-4000-8000-000000000003` | `customer-bob`   | `CREATED` 2026-01-20 09:00, `PROCESSING` 09:05                  | Scenario 5     |
-| `10000000-0000-4000-8000-000000000004` | `customer-bob`   | `CREATED` 2026-02-03 10:00                                     | Scenario 4     |
+| Order ID                               | Customer         | Timeline                                                              | Used in       |
+|:---------------------------------------|:-----------------|:----------------------------------------------------------------------|:--------------|
+| `10000000-0000-4000-8000-000000000001` | `customer-alice` | `CREATED` 2026-01-15 17:00, `PROCESSING` 17:05, `COMPLETED` 17:10     | Scenario 2, 4 |
+| `10000000-0000-4000-8000-000000000002` | `customer-alice` | `CREATED` 2026-01-15 18:00 (wrong amount `99.00`), `PROCESSING` 18:05 | Scenario 3    |
+| `10000000-0000-4000-8000-000000000003` | `customer-bob`   | `CREATED` 2026-01-20 09:00, `PROCESSING` 09:05                        | Scenario 5    |
+| `10000000-0000-4000-8000-000000000004` | `customer-bob`   | `CREATED` 2026-02-03 10:00                                            | Scenario 4    |
 
 ## Helper Commands
 
