@@ -89,7 +89,7 @@ The application publishes four event types:
 | Event                        | Trigger                            | Effect on the order history                                 |
 |------------------------------|------------------------------------|-------------------------------------------------------------|
 | `ORDER_CREATED`              | `POST /orders`                     | Appends the first version of the order                      |
-| `ORDER_STATUS_UPDATED`       | `PUT /orders/status`               | Appends a new version with the new status                   |
+| `ORDER_STATUS_UPDATED`       | `PUT /orders/{id}/status`          | Appends a new version with the new status                   |
 | `ORDER_TOTAL_AMOUNT_UPDATED` | `PUT /orders/totalAmount`          | Corrects the amount in every version (lightweight `UPDATE`) |
 | `ORDER_REPAIR`               | `POST /orders/{id}/history/repair` | Rebuilds every version from the PostgreSQL status timeline  |
 

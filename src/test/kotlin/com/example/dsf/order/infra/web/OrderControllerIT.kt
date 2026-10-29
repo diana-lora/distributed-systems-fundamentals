@@ -170,9 +170,9 @@ class OrderControllerIT : IntegrationTestContainers() {
         newStatus: OrderStatus,
     ) {
         mockMvc
-            .put("/orders/status") {
+            .put("/orders/$orderId/status") {
                 contentType = MediaType.APPLICATION_JSON
-                content = objectMapper.writeValueAsString(UpdateOrderStatusRequest(orderId, customerId, newStatus))
+                content = objectMapper.writeValueAsString(UpdateOrderStatusRequest(newStatus))
             }.andExpect { status { isOk() } }
     }
 

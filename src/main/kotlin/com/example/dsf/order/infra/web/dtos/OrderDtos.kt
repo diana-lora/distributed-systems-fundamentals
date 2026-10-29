@@ -31,8 +31,6 @@ data class OrderResponse(
 }
 
 data class UpdateOrderStatusRequest(
-    val orderId: UUID,
-    val customerId: String,
     val status: OrderStatus,
 )
 

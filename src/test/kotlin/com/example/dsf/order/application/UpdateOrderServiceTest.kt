@@ -56,7 +56,7 @@ class UpdateOrderServiceTest {
     fun `should update the status and save the status change and an ORDER_STATUS_UPDATED outbox event`() {
         givenExistingOrder()
 
-        val updated = service.execute(UpdateOrderStatusCommand(order.id, "customer-1", OrderStatus.PROCESSING))
+        val updated = service.execute(UpdateOrderStatusCommand(order.id, OrderStatus.PROCESSING))
 
         assertThat(updated.status).isEqualTo(OrderStatus.PROCESSING)
         assertThat(outboxEvent.captured.eventType).isEqualTo(ORDER_STATUS_UPDATED)
@@ -107,7 +107,7 @@ class UpdateOrderServiceTest {
         every { orderRepository.findOrderById(unknownOrderId) } returns null
 
         assertThrows<OrderNotFoundException> {
-            service.execute(UpdateOrderStatusCommand(unknownOrderId, "customer-1", OrderStatus.PROCESSING))
+            service.execute(UpdateOrderStatusCommand(unknownOrderId, OrderStatus.PROCESSING))
         }
         assertThrows<OrderNotFoundException> {
             service.execute(UpdateOrderTotalAmountCommand(unknownOrderId, "customer-1", BigDecimal("9.90")))

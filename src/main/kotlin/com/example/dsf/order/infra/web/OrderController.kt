@@ -49,14 +49,14 @@ class OrderController(
             .body(OrderResponse.fromDomain(savedOrder))
     }
 
-    @PutMapping("/status")
+    @PutMapping("/{orderId}/status")
     fun updateOrderStatus(
+        @PathVariable orderId: UUID,
         @RequestBody request: UpdateOrderStatusRequest,
     ) {
         val command =
             UpdateOrderStatusCommand(
-                orderId = request.orderId,
-                customerId = request.customerId,
+                orderId = orderId,
                 newStatus = request.status,
             )
 

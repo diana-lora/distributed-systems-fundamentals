@@ -40,7 +40,7 @@ class OrderHistoryTimeTravelIT : IntegrationTestContainers() {
 
         // Some time later the order moves on
         Thread.sleep(50)
-        updateStatus(orderId, customerId, OrderStatus.PROCESSING)
+        updateStatus(orderId, OrderStatus.PROCESSING)
         val processingTime = awaitLatestState(orderId) { assertThat(it.status).isEqualTo(OrderStatus.PROCESSING) }.updatedAt
 
         assertThat(processingTime).isAfter(createdTime)
@@ -59,7 +59,7 @@ class OrderHistoryTimeTravelIT : IntegrationTestContainers() {
         val createdTime = awaitLatestState(orderId) { assertThat(it.status).isEqualTo(OrderStatus.CREATED) }.updatedAt
 
         Thread.sleep(50)
-        updateStatus(orderId, customerId, OrderStatus.PROCESSING)
+        updateStatus(orderId, OrderStatus.PROCESSING)
         val processingTime = awaitLatestState(orderId) { assertThat(it.status).isEqualTo(OrderStatus.PROCESSING) }.updatedAt
 
         // The typo was copied into every version of the order
@@ -87,7 +87,7 @@ class OrderHistoryTimeTravelIT : IntegrationTestContainers() {
         val createdTime = awaitLatestState(orderId) { assertThat(it.status).isEqualTo(OrderStatus.CREATED) }.updatedAt
 
         Thread.sleep(50)
-        updateStatus(orderId, customerId, OrderStatus.PROCESSING)
+        updateStatus(orderId, OrderStatus.PROCESSING)
         val processingTime = awaitLatestState(orderId) { assertThat(it.status).isEqualTo(OrderStatus.PROCESSING) }.updatedAt
         val processingVersion = historyRepository.findByOrderId(orderId).single().version
 
@@ -136,13 +136,12 @@ class OrderHistoryTimeTravelIT : IntegrationTestContainers() {
 
     private fun updateStatus(
         orderId: UUID,
-        customerId: String,
         status: OrderStatus,
     ) {
         mockMvc
-            .put("/orders/status") {
+            .put("/orders/$orderId/status") {
                 contentType = MediaType.APPLICATION_JSON
-                content = objectMapper.writeValueAsString(UpdateOrderStatusRequest(orderId, customerId, status))
+                content = objectMapper.writeValueAsString(UpdateOrderStatusRequest(status))
             }.andExpect { status { isOk() } }
     }
 
