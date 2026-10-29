@@ -120,7 +120,7 @@ The application stack is built entirely using containerized modern enterprise te
    Navigates into the infrastructure folder containing the orchestrator configuration assets.
 
 4. **`docker compose --profile app up --build -d`**
-   Builds the application image and spins up the entire architectural service stack in the background. On the first start, the application inserts demo orders that flow through Debezium and Kafka into ClickHouse.
+   Builds the application image and spins up the entire architectural service stack in the background.
 
 5. **Verify `http://localhost:8080/actuator/health`**
    Accesses the Spring Boot diagnostics interface to confirm the server, database, and broker connections are fully operational.
@@ -132,7 +132,7 @@ The application stack is built entirely using containerized modern enterprise te
    Queries the Debezium Connect REST API directly to verify that the connector and its task are `RUNNING`.
 
 8. **Verify `http://localhost:8080/ordersHistory`**
-   Returns the current order history from ClickHouse, including the demo orders.
+   Returns the current order history from ClickHouse.
 
 9. **`docker compose --profile app down`**
    Stops and removes all running containers safely when you are finished developing.
@@ -141,7 +141,7 @@ The application stack is built entirely using containerized modern enterprise te
     Stops the containers and permanently deletes the PostgreSQL and ClickHouse data volumes to trigger fresh Flyway migrations on the next run.
 
 ### Running the Application in IntelliJ IDEA
-The `app` service belongs to the `app` Compose profile. Run `docker compose up -d` in the `infra` folder to start every service except the application, then run or debug the main class in IntelliJ. Set `APP_DEMO_DATA_ENABLED=true` in the run configuration to insert the demo orders. See [infra/README.md](infra/README.md) for details.
+The `app` service belongs to the `app` Compose profile. Run `docker compose up -d` in the `infra` folder to start every service except the application, then run or debug the main class in IntelliJ. See [infra/README.md](infra/README.md) for details.
 
 ### Service Access Ports
 

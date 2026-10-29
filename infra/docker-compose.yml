@@ -112,8 +112,6 @@ services:
       SPRING_DATASOURCE_PASSWORD: outbox_password
       CLICKHOUSE_DATASOURCE_URL: jdbc:clickhouse://clickhouse:8123/orders_analytics
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      # Inserts the demo orders of docs/runbook/clickhouse-order-history-scenarios.md on the first start
-      APP_DEMO_DATA_ENABLED: "true"
 
   debezium:
     image: quay.io/debezium/connect:3.7.0.Final

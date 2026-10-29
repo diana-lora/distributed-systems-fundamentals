@@ -15,29 +15,12 @@ explains why the results look the way they do.
    cd infra
    docker compose --profile app up --build -d
    ```
-2. If the stack ran before, remove its volumes first with `docker compose --profile app down -v`. The demo orders are inserted only
-   once per database, and an existing database may hold an older schema.
+2. If the stack ran before, remove its volumes first with `docker compose --profile app down -v`, so that the scenarios
+   start from an empty database with the current schema.
 3. Wait until the application is healthy: `curl -s http://localhost:8080/actuator/health` returns `"status":"UP"`.
-4. Wait until the demo orders reach the order history (usually a few seconds after the connector is running):
-   ```bash
-   curl -s "http://localhost:8080/ordersHistory"
-   ```
-   The response must contain four orders.
+4. Install `jq`; the commands below use it to read order IDs from the responses.
 
-When the application runs in IntelliJ instead of Docker, set `APP_DEMO_DATA_ENABLED=true` in the run configuration to
-insert the demo orders.
-
-## Demo Data
-
-The application inserts the following orders into PostgreSQL on the first start. Debezium and the consumer copy them into
-ClickHouse, so every history version is a real Kafka offset. All times are UTC.
-
-| Order ID                               | Customer         | Timeline                                                              | Used in       |
-|:---------------------------------------|:-----------------|:----------------------------------------------------------------------|:--------------|
-| `10000000-0000-4000-8000-000000000001` | `customer-alice` | `CREATED` 2026-01-15 17:00, `PROCESSING` 17:05, `COMPLETED` 17:10     | Scenario 2, 4 |
-| `10000000-0000-4000-8000-000000000002` | `customer-alice` | `CREATED` 2026-01-15 18:00 (wrong amount `99.00`), `PROCESSING` 18:05 | Scenario 3    |
-| `10000000-0000-4000-8000-000000000003` | `customer-bob`   | `CREATED` 2026-01-20 09:00, `PROCESSING` 09:05                        | Scenario 5    |
-| `10000000-0000-4000-8000-000000000004` | `customer-bob`   | `CREATED` 2026-02-03 10:00                                            | Scenario 4    |
+Run all commands of this runbook in the same shell session, because later steps use the variables of earlier steps.
 
 ## Helper Commands
 
@@ -67,16 +50,78 @@ snapshot() {
 }
 ```
 
+Create an order and print its ID, change the status of an order, and record the current time:
+
+```bash
+create_order() {
+  curl -s -X POST http://localhost:8080/orders -H 'Content-Type: application/json' \
+    -d "{\"customerId\": \"$1\", \"totalAmount\": $2}" | jq -r .id
+}
+
+set_status() {
+  curl -s -X PUT http://localhost:8080/orders/status -H 'Content-Type: application/json' \
+    -d "{\"orderId\": \"$1\", \"customerId\": \"$2\", \"status\": \"$3\"}"
+}
+
+mark() {
+  sleep 2; date -u +%Y-%m-%dT%H:%M:%SZ; sleep 2
+}
+```
+
+`mark` pauses before and after it reads the clock, so every recorded time lies strictly between two order changes.
+
+## Create the Scenario Data
+
+Create the orders of Scenarios 2 to 5 through the REST API. The application stores the current time as `created_at`
+and `updated_at`, so the variables `T_*` record the points in time that the snapshots use later.
+
+```bash
+T_START=$(mark)
+
+# Scenarios 2 and 4: an order that runs through every status
+STATUS_ORDER=$(create_order customer-alice 49.90)
+T_STATUS_CREATED=$(mark)
+set_status "$STATUS_ORDER" customer-alice PROCESSING
+T_STATUS_PROCESSING=$(mark)
+set_status "$STATUS_ORDER" customer-alice COMPLETED
+T_STATUS_COMPLETED=$(mark)
+
+# Scenario 3: an order created with the wrong amount 99.00
+AMOUNT_ORDER=$(create_order customer-alice 99.00)
+T_AMOUNT_CREATED=$(mark)
+set_status "$AMOUNT_ORDER" customer-alice PROCESSING
+T_AMOUNT_PROCESSING=$(mark)
+
+# Scenario 5: an order whose history drifts later
+REBUILD_ORDER=$(create_order customer-bob 25.00)
+T_REBUILD_CREATED=$(mark)
+set_status "$REBUILD_ORDER" customer-bob PROCESSING
+T_REBUILD_PROCESSING=$(mark)
+```
+
+Wait until the orders reach the order history (usually a few seconds after the connector is running):
+
+```bash
+curl -s "http://localhost:8080/ordersHistory"; echo
+```
+
+The response must contain the three orders.
+
+| Variable        | Customer         | Timeline                                         | Used in       |
+|:----------------|:-----------------|:-------------------------------------------------|:--------------|
+| `STATUS_ORDER`  | `customer-alice` | `CREATED`, `PROCESSING`, `COMPLETED`             | Scenario 2, 4 |
+| `AMOUNT_ORDER`  | `customer-alice` | `CREATED` (wrong amount `99.00`), `PROCESSING`   | Scenario 3, 4 |
+| `REBUILD_ORDER` | `customer-bob`   | `CREATED`, `PROCESSING`                          | Scenario 5    |
+
 ## Scenario 1: Order Creation
 
 **Goal:** A new order appears in the order history as its first version.
 
 1. Create an order:
    ```bash
-   curl -s -X POST http://localhost:8080/orders -H 'Content-Type: application/json' \
-     -d '{"customerId": "customer-carol", "totalAmount": 12.50}'; echo
+   NEW_ORDER=$(create_order customer-carol 12.50); echo "$NEW_ORDER"
    ```
-2. Copy the `id` from the response and show its stored rows: `rows <id>`.
+2. Show its stored rows: `rows $NEW_ORDER`.
 
 **Expected result:** One row with status `CREATED`, `created_at` equal to `updated_at`, and a `version` equal to the Kafka
 offset of the event.
@@ -85,107 +130,112 @@ offset of the event.
 
 **Goal:** Every status change is appended as a new row, and earlier states remain readable.
 
-1. Show the stored rows of the first demo order:
+1. Show the stored rows of the order:
    ```bash
-   rows 10000000-0000-4000-8000-000000000001
+   rows $STATUS_ORDER
    ```
 2. Read snapshots before, between and after the status changes:
    ```bash
-   snapshot 10000000-0000-4000-8000-000000000001 2026-01-15T16:59:00Z
-   snapshot 10000000-0000-4000-8000-000000000001 2026-01-15T17:02:00Z
-   snapshot 10000000-0000-4000-8000-000000000001 2026-01-15T17:06:00Z
-   snapshot 10000000-0000-4000-8000-000000000001 2026-01-15T17:11:00Z
+   snapshot $STATUS_ORDER $T_START
+   snapshot $STATUS_ORDER $T_STATUS_CREATED
+   snapshot $STATUS_ORDER $T_STATUS_PROCESSING
+   snapshot $STATUS_ORDER $T_STATUS_COMPLETED
    ```
-3. Force a background merge and repeat the `17:02` snapshot:
+3. Force a background merge and repeat the `T_STATUS_CREATED` snapshot:
    ```bash
    ch "OPTIMIZE TABLE order_history FINAL"
-   snapshot 10000000-0000-4000-8000-000000000001 2026-01-15T17:02:00Z
+   snapshot $STATUS_ORDER $T_STATUS_CREATED
    ```
 
 **Expected result:** Three rows with increasing versions. The snapshots return `[]`, `CREATED`, `PROCESSING` and
-`COMPLETED`. After the merge, the `17:02` snapshot still returns `CREATED`, because every state has its own `updated_at`
-and therefore its own sorting key.
+`COMPLETED`. After the merge, the `T_STATUS_CREATED` snapshot still returns `CREATED`, because every state has its own
+`updated_at` and therefore its own sorting key.
 
 ## Scenario 3: Retroactive Total Amount Correction
 
 **Goal:** A wrong amount is corrected in every past snapshot, while the status timeline stays unchanged.
 
-1. Confirm that both versions of the second demo order hold the wrong amount `99.00`:
+1. Confirm that both versions of the order hold the wrong amount `99.00`:
    ```bash
-   rows 10000000-0000-4000-8000-000000000002
+   rows $AMOUNT_ORDER
    ```
 2. Correct the amount:
    ```bash
    curl -s -X PUT http://localhost:8080/orders/totalAmount -H 'Content-Type: application/json' \
-     -d '{"orderId": "10000000-0000-4000-8000-000000000002", "customerId": "customer-alice", "totalAmount": 9.90}'
+     -d "{\"orderId\": \"$AMOUNT_ORDER\", \"customerId\": \"customer-alice\", \"totalAmount\": 9.90}"
    ```
 3. Show the rows and the snapshots before and after the status change:
    ```bash
-   rows 10000000-0000-4000-8000-000000000002
-   snapshot 10000000-0000-4000-8000-000000000002 2026-01-15T18:02:00Z
-   snapshot 10000000-0000-4000-8000-000000000002 2026-01-15T18:06:00Z
+   rows $AMOUNT_ORDER
+   snapshot $AMOUNT_ORDER $T_AMOUNT_CREATED
+   snapshot $AMOUNT_ORDER $T_AMOUNT_PROCESSING
    ```
 
-**Expected result:** Still two rows with unchanged versions and timestamps, both with `total_amount = 9.90`. The `18:02`
-snapshot returns `CREATED` with `9.90`, and the `18:06` snapshot returns `PROCESSING` with `9.90`.
+**Expected result:** Still two rows with unchanged versions and timestamps, both with `total_amount = 9.90`. The
+`T_AMOUNT_CREATED` snapshot returns `CREATED` with `9.90`, and the `T_AMOUNT_PROCESSING` snapshot returns `PROCESSING`
+with `9.90`.
 
 ## Scenario 4: Historical Point-in-Time Reconstruction (Time Travel)
 
 **Goal:** A snapshot returns every order exactly as it was at the target time, one row per order.
 
-1. Read the orders of `customer-alice` at `17:30`:
+1. Read the orders of `customer-alice` before the first order, after the first order was completed, and after the
+   second order changed to `PROCESSING`:
    ```bash
-   curl -s "http://localhost:8080/ordersHistory?customerId=customer-alice&targetTime=2026-01-15T17:30:00Z"; echo
-   ```
-2. Read all orders at the end of January and at the end of February:
-   ```bash
-   curl -s "http://localhost:8080/ordersHistory?targetTime=2026-01-31T23:59:00Z"; echo
-   curl -s "http://localhost:8080/ordersHistory?targetTime=2026-02-28T23:59:00Z"; echo
+   curl -s "http://localhost:8080/ordersHistory?customerId=customer-alice&targetTime=$T_START"; echo
+   curl -s "http://localhost:8080/ordersHistory?customerId=customer-alice&targetTime=$T_STATUS_COMPLETED"; echo
+   curl -s "http://localhost:8080/ordersHistory?customerId=customer-alice&targetTime=$T_AMOUNT_PROCESSING"; echo
    ```
 
 **Expected result:**
 
-* At `17:30`, `customer-alice` has only order `...0001` with status `COMPLETED`. Order `...0002` did not exist yet.
-* At the end of January, three demo orders are returned. The February order `...0004` is absent; ClickHouse skips its
-  monthly partition because of the `created_at` filter.
-* At the end of February, all four demo orders are returned.
+* At `T_START`, the response is `[]`.
+* At `T_STATUS_COMPLETED`, `customer-alice` has only `STATUS_ORDER` with status `COMPLETED`. `AMOUNT_ORDER` did not exist
+  yet.
+* At `T_AMOUNT_PROCESSING`, both orders are returned: `STATUS_ORDER` with `COMPLETED` and `AMOUNT_ORDER` with
+  `PROCESSING`.
+
+The `created_at <= targetTime` filter also lets ClickHouse skip whole monthly partitions of orders created after the
+target time. The API always stores the current time as `created_at`, so this runbook cannot create orders in another
+month; the design note explains the partition pruning.
 
 ## Scenario 5: History Rebuild (Discrepancy Troubleshooting)
 
 **Goal:** Repair an order whose history no longer matches PostgreSQL, including rows that never happened.
 
-1. Simulate drift: store a `COMPLETED` state at `09:06` that never happened in PostgreSQL. It copies the newest version
-   of the order, so it wins every snapshot after `09:06`:
+1. Simulate drift: store a `COMPLETED` state one second after the newest version that never happened in PostgreSQL. It
+   copies the newest version of the order, so it wins every later snapshot:
    ```bash
    ch "INSERT INTO order_history
-       SELECT order_id, customer_id, total_amount, 'COMPLETED', created_at, updated_at + INTERVAL 1 MINUTE, version
-       FROM order_history WHERE order_id = '10000000-0000-4000-8000-000000000003'
+       SELECT order_id, customer_id, total_amount, 'COMPLETED', created_at, updated_at + INTERVAL 1 SECOND, version
+       FROM order_history WHERE order_id = '$REBUILD_ORDER'
        ORDER BY version DESC, updated_at DESC LIMIT 1"
    ```
 2. Confirm the discrepancy. PostgreSQL still reports `PROCESSING`, while the history reports `COMPLETED`:
    ```bash
-   rows 10000000-0000-4000-8000-000000000003
-   snapshot 10000000-0000-4000-8000-000000000003 2026-01-20T09:10:00Z
-   curl -s http://localhost:8080/orders | grep -o '"id":"10000000-0000-4000-8000-000000000003"[^}]*'
+   rows $REBUILD_ORDER
+   snapshot $REBUILD_ORDER $(mark)
+   curl -s http://localhost:8080/orders | jq ".[] | select(.id == \"$REBUILD_ORDER\")"
    ```
 3. Trigger the history rebuild:
    ```bash
    curl -s -o /dev/null -w '%{http_code}\n' -X POST \
-     http://localhost:8080/orders/10000000-0000-4000-8000-000000000003/history/repair
+     http://localhost:8080/orders/$REBUILD_ORDER/history/repair
    ```
 4. Verify the repaired history:
    ```bash
-   rows 10000000-0000-4000-8000-000000000003
-   snapshot 10000000-0000-4000-8000-000000000003 2026-01-20T09:02:00Z
-   snapshot 10000000-0000-4000-8000-000000000003 2026-01-20T09:10:00Z
+   rows $REBUILD_ORDER
+   snapshot $REBUILD_ORDER $T_REBUILD_CREATED
+   snapshot $REBUILD_ORDER $(mark)
    ```
 
 **Expected result:**
 
 * Step 3 returns `202`; the rebuild runs asynchronously once the repair event is consumed.
-* After the rebuild, exactly two rows remain: `CREATED` at `09:00` and `PROCESSING` at `09:05`. Both share one new
-  version, higher than every earlier version. The `COMPLETED` row and the older versions are deleted.
-* The `09:02` snapshot returns `CREATED`, and the `09:10` snapshot returns `PROCESSING` with `updated_at` `09:05`.
+* After the rebuild, exactly two rows remain: `CREATED` and `PROCESSING` with their original `updated_at`. Both share
+  one new version, higher than every earlier version. The `COMPLETED` row and the older versions are deleted.
+* The `T_REBUILD_CREATED` snapshot returns `CREATED`, and the current snapshot returns `PROCESSING` with the
+  `updated_at` of the status change.
 
 **If the rows are not repaired:** Check the application logs (`docker logs outbox-spring-app`) for the repair message
 of the order, and the order events topic in Kafka UI (`http://localhost:8082`) for an `ORDER_REPAIR` message. If the
@@ -193,7 +243,7 @@ consumer failed, follow [Kafka Poison Pill Inspection and Re-drive](kafka-poison
 
 ## Reset
 
-Remove all containers and volumes to start again with only the demo orders:
+Remove all containers and volumes to start again with an empty database:
 
 ```bash
 docker compose --profile app down -v
