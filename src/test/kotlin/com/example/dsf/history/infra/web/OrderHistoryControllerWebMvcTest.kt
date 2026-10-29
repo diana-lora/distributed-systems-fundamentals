@@ -33,7 +33,7 @@ class OrderHistoryControllerWebMvcTest {
         every { getOrderHistoryService.execute(capture(query)) } returns emptyList()
         val before = Instant.now()
 
-        mockMvc.get("/ordersHistory").andExpect { status { isOk() } }
+        mockMvc.get("/orders-history").andExpect { status { isOk() } }
 
         assertThat(query.captured.targetTime).isBetween(before, Instant.now())
         assertThat(query.captured.customerId).isNull()
@@ -46,7 +46,7 @@ class OrderHistoryControllerWebMvcTest {
         val orderId = UUID.randomUUID()
 
         mockMvc
-            .get("/ordersHistory") {
+            .get("/orders-history") {
                 param("targetTime", "2026-01-15T10:02:00Z")
                 param("customerId", "customer-1")
                 param("orderId", orderId.toString())
@@ -64,7 +64,7 @@ class OrderHistoryControllerWebMvcTest {
         every { getOrderHistoryService.execute(any()) } returns
             listOf(OrderHistory(orderId, "customer-1", BigDecimal("49.90"), OrderStatus.CREATED, createdAt, createdAt, version = 101))
 
-        mockMvc.get("/ordersHistory").andExpect {
+        mockMvc.get("/orders-history").andExpect {
             status { isOk() }
             jsonPath("$[0].orderId") { value(orderId.toString()) }
             jsonPath("$[0].status") { value("CREATED") }
@@ -75,7 +75,7 @@ class OrderHistoryControllerWebMvcTest {
     @Test
     fun `should return 400 for an invalid targetTime`() {
         mockMvc
-            .get("/ordersHistory") { param("targetTime", "not-a-date") }
+            .get("/orders-history") { param("targetTime", "not-a-date") }
             .andExpect { status { isBadRequest() } }
 
         verify(exactly = 0) { getOrderHistoryService.execute(any()) }
@@ -84,7 +84,7 @@ class OrderHistoryControllerWebMvcTest {
     @Test
     fun `should return 400 for an invalid orderId`() {
         mockMvc
-            .get("/ordersHistory") { param("orderId", "abc") }
+            .get("/orders-history") { param("orderId", "abc") }
             .andExpect { status { isBadRequest() } }
 
         verify(exactly = 0) { getOrderHistoryService.execute(any()) }

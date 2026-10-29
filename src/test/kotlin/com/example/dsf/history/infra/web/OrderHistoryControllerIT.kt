@@ -75,7 +75,7 @@ class OrderHistoryControllerIT : IntegrationTestContainers() {
     private fun getOrderHistory(vararg params: Pair<String, String>): List<OrderHistoryResponse> {
         val response =
             mockMvc
-                .get("/ordersHistory") { params.forEach { (name, value) -> param(name, value) } }
+                .get("/orders-history") { params.forEach { (name, value) -> param(name, value) } }
                 .andExpect { status { isOk() } }
                 .andReturn()
                 .response.contentAsString

@@ -23,11 +23,6 @@ import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
-/**
- * Covers the time travel scenarios of ADR 0003 end to end through the public API: orders are changed with the order
- * endpoints, the history is written asynchronously (outbox -> Debezium -> Kafka -> consumer -> ClickHouse) and read
- * back with `GET /ordersHistory`.
- */
 class OrderHistoryTimeTravelIT : IntegrationTestContainers() {
     @Autowired
     private lateinit var historyRepository: ClickhouseOrderHistoryTestRepository
@@ -150,7 +145,7 @@ class OrderHistoryTimeTravelIT : IntegrationTestContainers() {
         totalAmount: BigDecimal,
     ) {
         mockMvc
-            .put("/orders/$orderId/totalAmount") {
+            .put("/orders/$orderId/total-amount") {
                 contentType = MediaType.APPLICATION_JSON
                 content = objectMapper.writeValueAsString(UpdateOrderTotalAmountRequest(totalAmount))
             }.andExpect { status { isOk() } }
@@ -158,7 +153,7 @@ class OrderHistoryTimeTravelIT : IntegrationTestContainers() {
 
     private fun repairHistory(orderId: UUID) {
         mockMvc
-            .post("/orders/$orderId/history/repair")
+            .post("/orders/$orderId/history-repair")
             .andExpect { status { isAccepted() } }
     }
 
@@ -169,7 +164,7 @@ class OrderHistoryTimeTravelIT : IntegrationTestContainers() {
     ): List<OrderHistoryResponse> {
         val response =
             mockMvc
-                .get("/ordersHistory") {
+                .get("/orders-history") {
                     param("orderId", orderId.toString())
                     targetTime?.let { param("targetTime", it.toString()) }
                 }.andExpect { status { isOk() } }

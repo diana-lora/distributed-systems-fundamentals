@@ -113,7 +113,7 @@ class OrderControllerIT : IntegrationTestContainers() {
         updateOrderStatus(orderId, OrderStatus.COMPLETED)
 
         mockMvc
-            .post("/orders/$orderId/history/repair")
+            .post("/orders/$orderId/history-repair")
             .andExpect { status { isAccepted() } }
 
         val outboxEvents = findOutboxEvents(orderId)
@@ -181,7 +181,7 @@ class OrderControllerIT : IntegrationTestContainers() {
         newTotalAmount: BigDecimal,
     ) {
         mockMvc
-            .put("/orders/$orderId/totalAmount") {
+            .put("/orders/$orderId/total-amount") {
                 contentType = MediaType.APPLICATION_JSON
                 content = objectMapper.writeValueAsString(UpdateOrderTotalAmountRequest(newTotalAmount))
             }.andExpect { status { isOk() } }

@@ -62,7 +62,7 @@ flowchart LR
     subgraph history["history package"]
         consumer["OrderEventConsumer"]
         processService["ProcessOrderHistoryService"]
-        historyController["OrderHistoryController<br/>/ordersHistory"]
+        historyController["OrderHistoryController<br/>/orders-history"]
         getHistoryService["GetOrderHistoryService"]
         historyRepository["ClickhouseOrderHistoryRepository"]
     end
@@ -90,8 +90,8 @@ The application publishes four event types:
 |------------------------------|------------------------------------|-------------------------------------------------------------|
 | `ORDER_CREATED`              | `POST /orders`                     | Appends the first version of the order                      |
 | `ORDER_STATUS_UPDATED`       | `PUT /orders/{id}/status`          | Appends a new version with the new status                   |
-| `ORDER_TOTAL_AMOUNT_UPDATED` | `PUT /orders/{id}/totalAmount`     | Corrects the amount in every version (lightweight `UPDATE`) |
-| `ORDER_REPAIR`               | `POST /orders/{id}/history/repair` | Rebuilds every version from the PostgreSQL status timeline  |
+| `ORDER_TOTAL_AMOUNT_UPDATED` | `PUT /orders/{id}/total-amount`    | Corrects the amount in every version (lightweight `UPDATE`) |
+| `ORDER_REPAIR`               | `POST /orders/{id}/history-repair` | Rebuilds every version from the PostgreSQL status timeline  |
 
 ---
 
@@ -131,7 +131,7 @@ The application stack is built entirely using containerized modern enterprise te
 7. **Verify `http://localhost:8083/connectors/postgres-outbox-connector/status`**
    Queries the Debezium Connect REST API directly to verify that the connector and its task are `RUNNING`.
 
-8. **Verify `http://localhost:8080/ordersHistory`**
+8. **Verify `http://localhost:8080/orders-history`**
    Returns the current order history from ClickHouse.
 
 9. **`docker compose --profile app down`**

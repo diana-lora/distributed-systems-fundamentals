@@ -63,7 +63,7 @@ class OrderController(
         updateOrderService.execute(command)
     }
 
-    @PutMapping("/{orderId}/totalAmount")
+    @PutMapping("/{orderId}/total-amount")
     fun updateOrderTotalAmount(
         @PathVariable orderId: UUID,
         @RequestBody request: UpdateOrderTotalAmountRequest,
@@ -77,7 +77,7 @@ class OrderController(
         updateOrderService.execute(command)
     }
 
-    @PostMapping("/{orderId}/history/repair")
+    @PostMapping("/{orderId}/history-repair")
     fun repairOrderHistory(
         @PathVariable orderId: UUID,
     ): ResponseEntity<Unit> {

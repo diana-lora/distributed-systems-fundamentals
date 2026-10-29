@@ -12,7 +12,7 @@ import java.time.Instant
 import java.util.UUID
 
 @RestController
-@RequestMapping("/ordersHistory")
+@RequestMapping("/orders-history")
 class OrderHistoryController(
     private val getOrderHistoryService: GetOrderHistoryService,
 ) {

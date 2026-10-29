@@ -46,7 +46,7 @@ class OrderControllerWebMvcTest {
         every { repairOrderHistoryService.execute(any()) } just runs
 
         mockMvc
-            .post("/orders/$orderId/history/repair")
+            .post("/orders/$orderId/history-repair")
             .andExpect { status { isAccepted() } }
 
         verify { repairOrderHistoryService.execute(match { it.orderId == orderId }) }
@@ -57,7 +57,7 @@ class OrderControllerWebMvcTest {
         every { repairOrderHistoryService.execute(any()) } throws OrderNotFoundException("Order not found (ID=$unknownOrderId)")
 
         mockMvc
-            .post("/orders/$unknownOrderId/history/repair")
+            .post("/orders/$unknownOrderId/history-repair")
             .andExpect {
                 status { isNotFound() }
                 jsonPath("$.detail") { value("Order not found (ID=$unknownOrderId)") }
@@ -85,7 +85,7 @@ class OrderControllerWebMvcTest {
             OrderNotFoundException("Order not found (ID=$unknownOrderId)")
 
         mockMvc
-            .put("/orders/$unknownOrderId/totalAmount") {
+            .put("/orders/$unknownOrderId/total-amount") {
                 contentType = MediaType.APPLICATION_JSON
                 content = """{"totalAmount": 9.90}"""
             }.andExpect {
