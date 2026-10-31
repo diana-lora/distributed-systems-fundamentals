@@ -1,25 +1,23 @@
 package com.example.dsf.order.domain
 
+import com.example.dsf.commons.OrderStatus
+import com.example.dsf.commons.nowInMillis
 import org.springframework.data.annotation.Id
+import org.springframework.data.annotation.Version
 import org.springframework.data.relational.core.mapping.Table
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
-import org.springframework.data.domain.Persistable
 
 @Table("orders")
 class Order(
     @Id
-    private val id: UUID = UUID.randomUUID(),
+    val id: UUID = UUID.randomUUID(),
     val customerId: String,
-    val totalAmount: BigDecimal,
-    val status: OrderStatus = OrderStatus.CREATED,
-    val createdAt: Instant = Instant.now()
-) : Persistable<UUID> {
-    override fun getId(): UUID = id
-    override fun isNew(): Boolean = true
-}
-
-enum class OrderStatus {
-    CREATED, PROCESSING, COMPLETED, CANCELLED
-}
+    var totalAmount: BigDecimal,
+    var status: OrderStatus = OrderStatus.CREATED,
+    val createdAt: Instant = nowInMillis(),
+    // Null for new orders: Spring Data JDBC INSERTs, otherwise UPDATEs with optimistic locking
+    @Version
+    var version: Long? = null,
+)

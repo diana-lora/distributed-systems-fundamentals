@@ -4,5 +4,5 @@ import java.math.BigDecimal
 
 data class PlaceOrderCommand(
     val customerId: String,
-    val totalAmount: BigDecimal
+    val totalAmount: BigDecimal,
 )
