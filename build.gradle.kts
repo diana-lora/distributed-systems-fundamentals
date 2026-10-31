@@ -42,7 +42,7 @@ dependencies {
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
     implementation("tools.jackson.module:jackson-module-kotlin")
 
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.2.0")
 
     implementation("io.github.oshai:kotlin-logging-jvm:8.0.4")
 
