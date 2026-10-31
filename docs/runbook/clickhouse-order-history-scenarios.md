@@ -107,12 +107,15 @@ explains why the results look the way they do.
    ```bash
    curl -s "http://localhost:8080/orders-history?orderId=<order-id>"
    ```
-You should see one entry with status `PROCESSING`; the target time defaults to now. Note its `createdAt` (when the
+   You should see one entry with status `PROCESSING`; the target time defaults to now. Note its `createdAt` (when the
    order was created) and `updatedAt` (when it moved to `PROCESSING`).
 3. Read the order at specific points in time, using those values as `targetTime`:
    ```bash
    curl -s "http://localhost:8080/orders-history?orderId=<order-id>&targetTime=<target-time>"
    ```
+   `<target-time>` is an ISO-8601 instant in UTC with the `Z` suffix, for example `2026-10-31T05:39:47.874Z`;
+   fractional seconds are optional. The `createdAt` and `updatedAt` values from step 2 already use this format, so you
+   can copy them as they are.
    * Shortly before `createdAt`: you should see `[]`, because the order did not exist yet.
    * At `createdAt`: you should see one entry with status `CREATED`.
    * At `updatedAt`: you should see one entry with status `PROCESSING`.
